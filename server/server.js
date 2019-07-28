@@ -1,19 +1,36 @@
-const server = require('http').createServer();
-const io = require('socket.io')(server);
+var server = require('http').Server();
+var io = require('socket.io')(server);
 
-var port = 1337;
 
-io.on('connection', (socket) => {
-  socket.on('ferret', (name, fn) => {
-    fn('woot');
+io.on('connection', function (socket) {
+  socket.emit('news', { hello: 'world' });
+  socket.on('my other event', function (data) {
+    console.log(data);
   });
 });
 
 
-server.listen(port);
+var users = {
+  // socket.id0: {
+  //   location: {x:0, y:0, z:0},
+  // }
+};
 
-const receiveMessage = (client, data) => {
+// fired when client connects
+ io.on('connection', (socket) => {
+   
+  //set what sockets do on different events
+  socket.on('newplayer', (username) => {
+    console.log(`connected socket.id: ${socket.id}`);
+    users[socket.id] = { username };
+  });
 
-}
+  socket.on('loc', (loc) => {
+    console.log(`location: ${JSON.stringify(loc)}`);
+  });
+});
 
-// server:
+
+server.listen(3000, function(){
+  console.log('listening on *:3000');
+});

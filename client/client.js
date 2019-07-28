@@ -1,32 +1,44 @@
+const io = require('socket.io-client');
 
-const socket = require('socket.io-client')('http://localhost');
+const ADDRESS = 'http://localhost:3000';
+const socket = io(ADDRESS);
 
 
-var port = 1337;
+var users = {
+  // socket.id0: {
+  //   location: {x:0, y:0, z:0},
+  //   username: fatpiginmud
+  // }
 
-var sendRate = 300; // 1/ping?
+};
+
 var fps = 30;
-
 var loc = {x:0, y:0, z:0};
-
 const pause = (ms) => new Promise((res, rej)=> setTimeout(res, ms));
+
+
 
 // sends  loc: {x:, y:, z:}, 
 const sendDefault = () => {
-  const locBuffer = Buffer.from(JSON.stringify({loc: loc}));
+  const msg = {loc: loc};
   // const buf2 = Buffer.from('bytes');
-  client.send([locBuffer, ], port, (err) => {
-    console.error(err);
-    // client.close();
-  });
+  socket.emit('loc', loc, /*moreInfo, ... */
+  );
+
 }
 
 const clientRunGame = async () => {
-  while (true) {
 
+  // 1. pick username
+  let username = "fatpiginmud";
+  socket.emit('newplayer', username);
+  
+  // 2. loop
+  while (true) {
     //render
 
-    // send to server
+    // if update position, send info to server
+    loc.x += .1;
     sendDefault();
     
     await pause(1000/fps);
@@ -35,6 +47,12 @@ const clientRunGame = async () => {
 
 
 
-socket.on('connect', function(){});
-socket.on('event', function(data){});
-socket.on('disconnect', function(){});
+
+
+
+
+socket.on('connect', clientRunGame);
+
+socket.on('connect_error', (error) => {
+  console.log("Connection error: " + JSON.stringify(error));
+});
