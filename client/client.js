@@ -43,12 +43,12 @@ const sendDefault = () => {
 // returns [new_fn, promise]
 const waitForExecutionPair = (callback) => {
   let r;
-  const p = new Promise((res, rej) => { r = res; });
+  const promise = new Promise((res, rej) => { r = res; });
   let new_fn = (...args) => {
     callback(...args);
     r();
   }
-  return [new_fn, p];
+  return [new_fn, promise];
 }
 
 const clientRunGame = async () => {
@@ -57,14 +57,10 @@ const clientRunGame = async () => {
     world = serverWorld; 
     users = serverUsers;
   };
-
-  const [fn, promise] = waitForExecutionPair(callback);
-
-  socket.emit('newplayer', username, fn);
+  const [new_callback, promise] = waitForExecutionPair(callback);
+  socket.emit('newplayer', username, new_callback);
   await promise;
-
-  console.log("world, users1 ", world, users);
-  
+  // once get here, know the callback was run  
   
   
   // 2. loop
@@ -74,6 +70,7 @@ const clientRunGame = async () => {
 
     // if update position, send info to server
     loc.x += .1;
+    console.log(loc);
     sendDefault();
     
     await pause(1000/fps);
