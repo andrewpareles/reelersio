@@ -1,18 +1,19 @@
-const dgram = require('dgram');
-const server = dgram.createSocket('udp4');
+const server = require('http').createServer();
+const io = require('socket.io')(server);
 
-server.on('error', (err) => {
-  console.log(`server error:\n${err.stack}`);
-  server.close();
+var port = 1337;
+
+io.on('connection', (socket) => {
+  socket.on('ferret', (name, fn) => {
+    fn('woot');
+  });
 });
 
-server.on('message', (msg, rinfo) => {
-  console.log(`server got: ${msg} from ${rinfo.address}:${rinfo.port}`);
-});
 
-server.on('listening', () => {
-  const address = server.address();
-  console.log(`server listening ${address.address}:${address.port}`);
-});
+server.listen(port);
 
-server.bind(41234);
+const receiveMessage = (client, data) => {
+
+}
+
+// server:
