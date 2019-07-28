@@ -1,3 +1,4 @@
+//https://socket.io/docs/server-api/
 var server = require('http').Server();
 var io = require('socket.io')(server);
 
@@ -15,18 +16,48 @@ var users = {
   //   location: {x:0, y:0, z:0},
   // }
 };
+var world = {
+
+};
+
+
+
+const generateRandomLocation = () => {
+  return {x: 10, y: 10, z: 10};
+}
+
+//callback(world, users)
+const onNewPlayer = socket => (username, callback) => {
+  const loc = generateRandomLocation();
+  users[socket.id] = {location: loc, username: username}
+  
+  console.log(`connected socket.id: ${socket.id}`);
+  console.log(`users: ${JSON.stringify(users, null, 3)}`);
+
+  callback(world, users);
+}
+
+
+
+
+
+
+
+
+
 
 // fired when client connects
  io.on('connection', (socket) => {
+   //set what server does on different events
    
-  //set what sockets do on different events
-  socket.on('newplayer', (username) => {
-    console.log(`connected socket.id: ${socket.id}`);
-    users[socket.id] = { username };
+  socket.on('newplayer', onNewPlayer(socket));
+
+  socket.on('message', (loc, ) => {
+    console.log(`location: ${JSON.stringify(loc)}`);
   });
 
-  socket.on('loc', (loc) => {
-    console.log(`location: ${JSON.stringify(loc)}`);
+  socket.on('disconnect', (reason) => {
+    delete users[socket.id];
   });
 });
 
