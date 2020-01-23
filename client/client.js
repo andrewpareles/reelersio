@@ -9,7 +9,7 @@ const socket = io(ADDRESS);
 var users = {
   // socket.id0: {
   //   location: {x:0, y:0, z:0},
-  //   username: fatpiginmud
+  //   username: user1
   // }
 };
 var world = {
