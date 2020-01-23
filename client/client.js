@@ -22,7 +22,7 @@ var world = {
 
 var fps = 30;
 var loc = {x:0, y:0, z:0};
-var username = "fatpiginmud";
+var username = "user1";
 
 
 
