@@ -20,15 +20,10 @@ var world = {
 
 
 
-var fps = 30;
 var loc = {x:0, y:0, z:0};
 var username = "user1";
 
 
-
-
-
-const pause = (ms) => new Promise((res, rej)=> setTimeout(res, ms));
 
 // sends  loc: {x:, y:, z:}, 
 const sendDefault = () => {
@@ -39,7 +34,11 @@ const sendDefault = () => {
 
 }
 
-// returns a new function to execute and a promise that resolves when the function executes
+
+
+
+
+// returns a new function to execute and a promise that resolves when the new function executes
 // returns [new_fn, promise]
 const waitForExecutionPair = (callback) => {
   let r;
@@ -57,26 +56,35 @@ const clientRunGame = async () => {
     world = serverWorld; 
     users = serverUsers;
   };
-  const [new_callback, promise] = waitForExecutionPair(callback);
+  const [new_callback, newplayer_ack] = waitForExecutionPair(callback);
   socket.emit('newplayer', username, new_callback);
-  await promise;
+  
+  await newplayer_ack;
   // once get here, know the callback was run  
   
-  
-  // 2. loop
-  while (true) {
-    // console.log("world, users", world, users);
-    //render
-
-    // if update position, send info to server
-    loc.x += .1;
-    console.log(loc);
-    sendDefault();
-    
-    await pause(1000/fps);
-  }
+  // 2. start game
+  window.requestAnimationFrame(drawAndSend);
 }
 
+
+
+var c = document.getElementById("canvas");
+var ctx = c.getContext("2d");
+
+let drawAndSend = () => {
+  // console.log("world, users", world, users);
+  //render
+
+  // if update position, send info to server
+  console.log(loc);
+  sendDefault();
+  
+  ctx
+
+
+
+  window.requestAnimationFrame(drawAndSend);
+} 
 
 
 

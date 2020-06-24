@@ -5,8 +5,8 @@
   "main": "client.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node client.js"
-  },
+    "compile": "browserify client.js -o browser/client-bundled.js && cp game.html browser/game.html && cp clientcss.css browser/clientcss.css"
+    },
   "author": "",
   "license": "ISC",
   "dependencies": {
