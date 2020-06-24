@@ -4,13 +4,14 @@
   "description": "",
   "main": "client.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node client.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "dgram": "^1.0.1",
-    "socket.io": "^2.2.0",
+    "socket.io": "^2.3.0",
     "socket.io-client": "^2.2.0"
   }
 }

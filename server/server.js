@@ -21,7 +21,6 @@ var world = {
 };
 
 
-
 const generateRandomLocation = () => {
   return {x: 10, y: 10, z: 10};
 }
