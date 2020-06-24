@@ -79,7 +79,6 @@ let drawAndSend = () => {
   console.log(loc);
   sendDefault();
   
-  ctx
 
 
 
