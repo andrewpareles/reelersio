@@ -71,7 +71,7 @@ const clientRunGame = async () => {
 var c = document.getElementById("canvas");
 var ctx = c.getContext("2d");
 
-let drawAndSend = () => {
+let drawAndSend = (time_ms) => {
   // console.log("world, users", world, users);
   //render
 
