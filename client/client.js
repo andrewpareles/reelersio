@@ -25,6 +25,14 @@ var username = "user1";
 
 
 
+
+
+
+var canvas = document.getElementById("canvas");
+var ctx = c.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
 // sends  loc: {x:, y:, z:}, 
 const sendDefault = () => {
   const msg = {loc: loc};
@@ -66,10 +74,6 @@ const clientRunGame = async () => {
   window.requestAnimationFrame(drawAndSend);
 }
 
-
-
-var c = document.getElementById("canvas");
-var ctx = c.getContext("2d");
 
 let drawAndSend = (time_ms) => {
   // console.log("world, users", world, users);
