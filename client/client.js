@@ -27,9 +27,9 @@ var username = "user1";
 
 
 
-
+// TODO: test this (fullscreen canvas)
 var canvas = document.getElementById("canvas");
-var ctx = c.getContext("2d");
+var ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 

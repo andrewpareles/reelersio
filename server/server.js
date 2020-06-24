@@ -2,15 +2,6 @@
 var server = require('http').Server();
 var io = require('socket.io')(server);
 
-
-io.on('connection', function (socket) {
-  socket.emit('news', { hello: 'world' });
-  socket.on('my other event', function (data) {
-    console.log(data);
-  });
-});
-
-
 var users = {
   // socket.id0: {
   //   location: {x:0, y:0, z:0},
@@ -52,7 +43,7 @@ const onNewPlayer = socket => (username, callback) => {
   socket.on('newplayer', onNewPlayer(socket));
 
   socket.on('message', (loc, ) => {
-    console.log(`location: ${JSON.stringify(loc)}`);
+    console.log(`location (server end): ${JSON.stringify(loc)}`);
   });
 
   socket.on('disconnect', (reason) => {

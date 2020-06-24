@@ -2235,6 +2235,14 @@ var username = "user1";
 
 
 
+
+
+// TODO: test this (fullscreen canvas)
+var canvas = document.getElementById("canvas");
+var ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
 // sends  loc: {x:, y:, z:}, 
 const sendDefault = () => {
   const msg = {loc: loc};
@@ -2277,11 +2285,7 @@ const clientRunGame = async () => {
 }
 
 
-
-var c = document.getElementById("canvas");
-var ctx = c.getContext("2d");
-
-let drawAndSend = () => {
+let drawAndSend = (time_ms) => {
   // console.log("world, users", world, users);
   //render
 
@@ -2289,7 +2293,6 @@ let drawAndSend = () => {
   console.log(loc);
   sendDefault();
   
-  ctx
 
 
 
