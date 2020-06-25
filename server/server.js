@@ -13,7 +13,7 @@ var world = {
 
 
 const generateRandomLocation = () => {
-  return {x: 10, y: 10, z: 10};
+  return {x: 10, y: 10};
 }
 
 //callback(world, users)
@@ -26,9 +26,6 @@ const onNewPlayer = socket => (username, callback) => {
 
   callback(world, users);
 }
-
-
-
 
 
 
