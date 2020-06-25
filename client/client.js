@@ -29,6 +29,12 @@ var world = {
 };
 
 //player info
+var keybindings = {
+  up: "w",
+  down: "s",
+  left: "a",
+  right: "d"
+}
 var directionPressed = {x:0, y:0} //NON-NORMALIZED
 var keypressed = {
   up: false,
@@ -98,6 +104,7 @@ const clientRunGame = async () => {
 
 var canvas = document.getElementById("canvas");
 var c = canvas.getContext("2d");
+
 var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
 
@@ -106,6 +113,7 @@ canvas.height = HEIGHT;
 
 var prevtime;
 var starttime;
+
 let drawAndSend = (currtime) => {
   if (starttime === undefined) {
     starttime = currtime;
@@ -128,10 +136,11 @@ let drawAndSend = (currtime) => {
 
   //render
   c.clearRect(0, 0, WIDTH, HEIGHT);
+
   c.beginPath()
   c.arc(loc.x,loc.y,player_radius,0,2*Math.PI);
   c.stroke();
-  // console.log(fps);
+  console.log("fps: ", fps);
 
   
 
@@ -155,25 +164,25 @@ let updateVelocity = () => {
 document.addEventListener('keydown', function(event) {
   let key = event.key.toLowerCase();
   switch(key) {
-    case "w":
+    case keybindings["up"]:
       if (!keypressed.up) {
         directionPressed.y += 1;
         keypressed.up = true;
       }
       break;
-    case "a":
-      if (!keypressed.left) {
-        directionPressed.x += -1;
-        keypressed.left = true;
-      }
-      break;
-    case "s":
+    case keybindings["down"]:
       if (!keypressed.down) {
         directionPressed.y += -1;
         keypressed.down = true;
       }
       break;
-    case "d":
+    case keybindings["left"]:
+      if (!keypressed.left) {
+        directionPressed.x += -1;
+        keypressed.left = true;
+      }
+      break;
+    case keybindings["right"]:
       if (!keypressed.right) {
         directionPressed.x += 1;
         keypressed.right = true;
@@ -186,19 +195,19 @@ document.addEventListener('keydown', function(event) {
 document.addEventListener('keyup', function(event) {
   let key = event.key.toLowerCase();
   switch(key) {
-    case "w":
+    case keybindings["up"]:
       directionPressed.y -= 1;
       keypressed.up = false;
       break;
-    case "a":
-      directionPressed.x -= -1;
-      keypressed.left = false;
-      break;
-    case "s":
+    case keybindings["down"]:
       directionPressed.y -= -1;
       keypressed.down = false;
       break;
-    case "d":
+    case keybindings["left"]:
+      directionPressed.x -= -1;
+      keypressed.left = false;
+      break;
+    case keybindings["right"]:
       directionPressed.x -= 1;
       keypressed.right = false;
       break;
