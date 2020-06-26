@@ -9,8 +9,9 @@ var vector_add = (a, b) => {
   return {x: a.x + b.x, y: a.y + b.y};
 }
 
-var vector_scalar = (scalar, vector) => {
-  return {x: scalar * vector.x, y: scalar * vector.y};
+// a is scalar, v is vector
+var vector_scalar = (a, v) => {
+  return {x: a * v.x, y: a * v.y};
 }
 
 var vector_norm = (a) => {
@@ -29,31 +30,46 @@ var world = {
 };
 
 //player info
-var keybindings = {
-  up: "w",
-  down: "s",
-  left: "a",
-  right: "d"
+var username = "user1";
+
+var keyBindings = {
+  up: 'w',
+  down: 's',
+  left: 'a',
+  right: 'd'
 }
-var directionPressed = {x:0, y:0} //NON-NORMALIZED
-var keypressed = {
+var keyPressed = {
   up: false,
   down: false,
   left: false,
   right: false
 }
+
+var directionPressed = {x:0, y:0} //NON-NORMALIZED
+
+let velocity_update = () => {
+  let directionPressedNorm = vector_norm(directionPressed);
+  vel = directionPressedNorm == 0 ? {x:0, y:0} : vector_scalar(walkspeed/directionPressedNorm, directionPressed);
+}
+
 var walkspeed = 124/1000 // pix/ms
 
 
-var player_radius = 10 
-
+// player info related to game mechanics
+var playerRadius = 10
 
 var loc = {x:0, y:0}; //location
 var vel = {x:0, y:0}; //velocity
-var username = "user1";
 
-
-
+// records the previous cycles of keys pressed to give a boost
+// they key is keybindings[up|down|left|right]
+var recentKeys = []; //[2nd most recent key pressed, most recent key pressed]
+var hasBoost = false;
+var recentKeys_insert = (key) => {
+  recentKeys[0] = recentKeys[1];
+  recentKeys[1] = key;
+}
+var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
 
 
 
@@ -123,11 +139,8 @@ let drawAndSend = (currtime) => {
   let elapsed = currtime - starttime;
   prevtime = currtime;
 
-
-
   // calculate fps
   let fps = Math.round(1000/dt);
-
 
   // update location
   loc.x += vel.x * dt;
@@ -138,81 +151,88 @@ let drawAndSend = (currtime) => {
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
   c.beginPath()
-  c.arc(loc.x,loc.y,player_radius,0,2*Math.PI);
+  c.arc(loc.x,loc.y,playerRadius,0,2*Math.PI);
   c.stroke();
   console.log("fps: ", fps);
-
-  
 
   // if update position, send info to server
   sendDefault();
   // console.log("world, users", world, users);
   // document.getElementById("fpsbox").innerText = fps;
 
-  
   window.requestAnimationFrame(drawAndSend);
 } 
 
 
 
 
-let updateVelocity = () => {
-  let directionPressedNorm = vector_norm(directionPressed);
-  vel = directionPressedNorm == 0 ? {x:0, y:0} : vector_scalar(walkspeed/directionPressedNorm, directionPressed);
-}
+
 
 document.addEventListener('keydown', function(event) {
   let key = event.key.toLowerCase();
   switch(key) {
-    case keybindings["up"]:
-      if (!keypressed.up) {
+    case keyBindings["up"]:
+      if (!keyPressed.up) {
         directionPressed.y += 1;
-        keypressed.up = true;
+        keyPressed.up = true;
+
+        hasBoost = recentKeys[0] === keyBindings["up"] && recentKeys[1] === keyBindings["down"];
+        recentKeys_insert(keyBindings["up"]);
       }
       break;
-    case keybindings["down"]:
-      if (!keypressed.down) {
+    case keyBindings["down"]:
+      if (!keyPressed.down) {
         directionPressed.y += -1;
-        keypressed.down = true;
+        keyPressed.down = true;
+
+        hasBoost = recentKeys[0] === keyBindings["down"] && recentKeys[1] === keyBindings["up"];
+        recentKeys_insert(keyBindings["down"]);
       }
       break;
-    case keybindings["left"]:
-      if (!keypressed.left) {
+    case keyBindings["left"]:
+      if (!keyPressed.left) {
         directionPressed.x += -1;
-        keypressed.left = true;
+        keyPressed.left = true;
+
+        hasBoost = recentKeys[0] === keyBindings["left"] && recentKeys[1] === keyBindings["right"];
+        recentKeys_insert(keyBindings["left"]);
       }
       break;
-    case keybindings["right"]:
-      if (!keypressed.right) {
+    case keyBindings["right"]:
+      if (!keyPressed.right) {
         directionPressed.x += 1;
-        keypressed.right = true;
+        keyPressed.right = true;
+
+        hasBoost = recentKeys[0] === keyBindings["right"] && recentKeys[1] === keyBindings["left"];
+        recentKeys_insert(keyBindings["right"]);
       }
       break;
   }
-  updateVelocity();
+  if (hasBoost) walkspeed = 500/1000;
+  velocity_update();
 });
 
 document.addEventListener('keyup', function(event) {
   let key = event.key.toLowerCase();
   switch(key) {
-    case keybindings["up"]:
+    case keyBindings["up"]:
       directionPressed.y -= 1;
-      keypressed.up = false;
+      keyPressed.up = false;
       break;
-    case keybindings["down"]:
+    case keyBindings["down"]:
       directionPressed.y -= -1;
-      keypressed.down = false;
+      keyPressed.down = false;
       break;
-    case keybindings["left"]:
+    case keyBindings["left"]:
       directionPressed.x -= -1;
-      keypressed.left = false;
+      keyPressed.left = false;
       break;
-    case keybindings["right"]:
+    case keyBindings["right"]:
       directionPressed.x -= 1;
-      keypressed.right = false;
+      keyPressed.right = false;
       break;
   }
-  updateVelocity();
+  velocity_update();
 });
 
 
