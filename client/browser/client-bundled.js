@@ -2214,18 +2214,39 @@ const io = require('socket.io-client');
 const ADDRESS = 'http://localhost:3000';
 const socket = io(ADDRESS);
 
-//vector functions on {x: , y:}
+//vector functions on {x: , y:}:
+// add vector a and b
 var vector_add = (a, b) => {
-  return {x: a.x + b.x, y: a.y + b.y};
+  return { x: a.x + b.x, y: a.y + b.y };
 }
 
-// a is scalar, v is vector
-var vector_scalar = (a, v) => {
-  return {x: a * v.x, y: a * v.y};
+// a*v, a is scalar, v is vector
+var vector_scalar = (v, a) => {
+  return { x: a * v.x, y: a * v.y };
 }
 
+// the magnitude of the vector
 var vector_norm = (a) => {
-  return Math.sqrt(Math.pow(a.x,2)+Math.pow(a.y,2));
+  return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+}
+
+// neither vector is null, and they have same values
+var vector_equals = (a, b) => {
+  return !!a && !!b && a.x == b.x && a.y == b.y;
+}
+
+// vector is not null, and doesnt contain all null or 0 values
+var vector_nonzero = (a) => {
+  return !!a && (!!a.x || !!a.y)
+}
+
+// if unnormalizable, return the 0 vector. 
+// Normalizes to a vector of size mag, or 1 if undefined
+var vector_normalized = (a, mag) => {
+  if (!mag && mag !== 0) mag = 1;
+  let norm = vector_norm(a);
+  return norm == 0 ? { x: 0, y: 0 } : vector_scalar(a, mag / norm);
+
 }
 
 //not including yourself
@@ -2255,37 +2276,61 @@ var keyPressed = {
   right: false
 }
 
-var directionPressed = {x:0, y:0} //NON-NORMALIZED
-
-let velocity_update = () => {
-  let directionPressedNorm = vector_norm(directionPressed);
-  vel = directionPressedNorm == 0 ? {x:0, y:0} : vector_scalar(walkspeed/directionPressedNorm, directionPressed);
-}
-
-var walkspeed = 124/1000 // pix/ms
-
-
 // player info related to game mechanics
+var loc = { x: 0, y: 0 }; //location
+var vel = { x: 0, y: 0 }; //velocity
+
 var playerRadius = 10
 
-var loc = {x:0, y:0}; //location
-var vel = {x:0, y:0}; //velocity
+var walkspeed = 124 / 1000 // pix/ms
 
-// records the previous cycles of keys pressed to give a boost
-// they key is keybindings[up|down|left|right]
-var recentKeys = []; //[2nd most recent key pressed, most recent key pressed]
-var hasBoost = false;
-var recentKeys_insert = (key) => {
-  recentKeys[0] = recentKeys[1];
-  recentKeys[1] = key;
+var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
+
+let velocity_update = () => {
+  vel = vector_add(vector_normalized(directionPressed, walkspeed), vector_normalized(boostDir, walkspeed * boostMultiplier));
 }
-var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
 
+
+
+
+// records the previous 3 values of directionPressed to determine boost
+var recentDirs = []; //[3rd most recent movement dir, 2nd most recent movement dir, most recent movement dir]
+var recentDirs_insert = (dir) => {
+  recentDirs[0] = recentDirs[1];
+  recentDirs[1] = recentDirs[2];
+  recentDirs[2] = dir;
+}
+
+var boostEnabled = false;
+var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
+var boostMultiplier = 0; // this multiplies walkspeed
+var boostDir = { x: 0, y: 0 } //direction of the boost
+
+var boost_update = () => {
+  console.log(recentDirs[0])
+  console.log(recentDirs[1])
+  console.log(recentDirs[2])
+  console.log("")
+  boostEnabled = vector_nonzero(recentDirs[0]) && vector_nonzero(recentDirs[1])
+    && vector_equals(recentDirs[0], recentDirs[2]) 
+    && !vector_equals(recentDirs[0], recentDirs[1])
+  if (boostEnabled) {
+    boostMultiplier = 1.5;
+    if (boostStreak == 0) { //first boost in this direction
+      boostDir = vector_normalized(vector_add(recentDirs[0], recentDirs[1]));
+      console.log("boostDir", boostDir)
+    }
+    boostStreak++;
+  } else {
+    boostStreak = 0;
+    boostMultiplier = 0;
+  }
+}
 
 
 // sends  loc: {x:, y:, z:}, 
 const sendDefault = () => {
-  const msg = {loc: loc};
+  const msg = { loc: loc };
   // const buf2 = Buffer.from('bytes');
   socket.emit('message', loc, /*moreInfo, ... */
   );
@@ -2311,15 +2356,15 @@ const waitForExecutionPair = (callback) => {
 const clientRunGame = async () => {
   // 1. tell server I'm a new player
   const callback = (serverWorld, serverUsers) => {
-    world = serverWorld; 
+    world = serverWorld;
     users = serverUsers;
   };
   const [new_callback, newplayer_ack] = waitForExecutionPair(callback);
   socket.emit('newplayer', username, new_callback);
-  
+
   await newplayer_ack;
   // once get here, know the callback was run  
-  
+
   // 2. start game
   window.requestAnimationFrame(drawAndSend);
 }
@@ -2350,20 +2395,20 @@ let drawAndSend = (currtime) => {
   prevtime = currtime;
 
   // calculate fps
-  let fps = Math.round(1000/dt);
+  let fps = Math.round(1000 / dt);
 
   // update location
   loc.x += vel.x * dt;
   loc.y += -vel.y * dt;
-  console.log("loc: ", loc);
+  // console.log("loc: ", loc);
 
   //render
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
   c.beginPath()
-  c.arc(loc.x,loc.y,playerRadius,0,2*Math.PI);
+  c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
   c.stroke();
-  console.log("fps: ", fps);
+  // console.log("fps: ", fps);
 
   // if update position, send info to server
   sendDefault();
@@ -2371,77 +2416,87 @@ let drawAndSend = (currtime) => {
   // document.getElementById("fpsbox").innerText = fps;
 
   window.requestAnimationFrame(drawAndSend);
-} 
+}
 
 
 
 
 
 
-document.addEventListener('keydown', function(event) {
+document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
-  switch(key) {
+  let movementDirChanged = false;
+  switch (key) {
     case keyBindings["up"]:
       if (!keyPressed.up) {
         directionPressed.y += 1;
         keyPressed.up = true;
-
-        hasBoost = recentKeys[0] === keyBindings["up"] && recentKeys[1] === keyBindings["down"];
-        recentKeys_insert(keyBindings["up"]);
+        movementDirChanged = true;
       }
       break;
     case keyBindings["down"]:
       if (!keyPressed.down) {
         directionPressed.y += -1;
         keyPressed.down = true;
-
-        hasBoost = recentKeys[0] === keyBindings["down"] && recentKeys[1] === keyBindings["up"];
-        recentKeys_insert(keyBindings["down"]);
+        movementDirChanged = true;
       }
       break;
     case keyBindings["left"]:
       if (!keyPressed.left) {
         directionPressed.x += -1;
         keyPressed.left = true;
-
-        hasBoost = recentKeys[0] === keyBindings["left"] && recentKeys[1] === keyBindings["right"];
-        recentKeys_insert(keyBindings["left"]);
+        movementDirChanged = true;
       }
       break;
     case keyBindings["right"]:
       if (!keyPressed.right) {
         directionPressed.x += 1;
         keyPressed.right = true;
-
-        hasBoost = recentKeys[0] === keyBindings["right"] && recentKeys[1] === keyBindings["left"];
-        recentKeys_insert(keyBindings["right"]);
+        movementDirChanged = true;
       }
       break;
   }
-  if (hasBoost) walkspeed = 500/1000;
+
+  if (movementDirChanged) {
+    recentDirs_insert({ ...directionPressed });
+    boost_update();
+  }
+
   velocity_update();
 });
 
-document.addEventListener('keyup', function(event) {
+document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
-  switch(key) {
+  let movementDirChanged = false;
+  switch (key) {
     case keyBindings["up"]:
       directionPressed.y -= 1;
       keyPressed.up = false;
+      movementDirChanged = true;
       break;
     case keyBindings["down"]:
       directionPressed.y -= -1;
       keyPressed.down = false;
+      movementDirChanged = true;
       break;
     case keyBindings["left"]:
       directionPressed.x -= -1;
       keyPressed.left = false;
+      movementDirChanged = true;
       break;
     case keyBindings["right"]:
       directionPressed.x -= 1;
       keyPressed.right = false;
+      movementDirChanged = true;
       break;
   }
+
+
+  if (movementDirChanged) {
+    recentDirs_insert({ ...directionPressed });
+    boost_update();
+  }
+
   velocity_update();
 });
 
