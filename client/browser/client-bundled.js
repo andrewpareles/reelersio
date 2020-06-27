@@ -2215,39 +2215,50 @@ const ADDRESS = 'http://localhost:3000';
 const socket = io(ADDRESS);
 
 //vector functions on {x: , y:}:
-// add vector a and b
-var vector_add = (a, b) => {
-  return { x: a.x + b.x, y: a.y + b.y };
+var vec = {
+  // add vector a and b
+  add: (a, b) => {
+    return { x: a.x + b.x, y: a.y + b.y };
+  },
+
+  // a*v, a is scalar, v is vector
+  scalar: (v, a) => {
+    return { x: a * v.x, y: a * v.y };
+  },
+
+  // the magnitude of the vector
+  norm: (a) => {
+    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+  },
+
+  // neither vector is null, and they have same values
+  equals: (a, b) => {
+    return !!a && !!b && a.x == b.x && a.y == b.y;
+  },
+
+  // vector is not null, and doesnt contain all falsy values (including 0)
+  nonzero: (a) => {
+    return !!a && (!!a.x || !!a.y)
+  },
+
+  // if unnormalizable, return the 0 vector. 
+  // Normalizes to a vector of size mag, or 1 if undefined
+  normalized: (a, mag) => {
+    if (!mag) {
+      if (mag !== 0) mag = 1;
+      else if (mag === 0) return {x:0, y:0};
+    }
+    let norm = vec.norm(a);
+    return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
+  },
+
+  negative: (a) => {
+    return { x: -a.x, y: -a.y };
+  }
 }
 
-// a*v, a is scalar, v is vector
-var vector_scalar = (v, a) => {
-  return { x: a * v.x, y: a * v.y };
-}
 
-// the magnitude of the vector
-var vector_norm = (a) => {
-  return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
-}
 
-// neither vector is null, and they have same values
-var vector_equals = (a, b) => {
-  return !!a && !!b && a.x == b.x && a.y == b.y;
-}
-
-// vector is not null, and doesnt contain all null or 0 values
-var vector_nonzero = (a) => {
-  return !!a && (!!a.x || !!a.y)
-}
-
-// if unnormalizable, return the 0 vector. 
-// Normalizes to a vector of size mag, or 1 if undefined
-var vector_normalized = (a, mag) => {
-  if (!mag && mag !== 0) mag = 1;
-  let norm = vector_norm(a);
-  return norm == 0 ? { x: 0, y: 0 } : vector_scalar(a, mag / norm);
-
-}
 
 //not including yourself
 var users = {
@@ -2269,6 +2280,14 @@ var keyBindings = {
   left: 'a',
   right: 'd'
 }
+
+var keyDirections = {
+  'w': { x: 0, y: 1 },
+  's': { x: 0, y: -1 }, //must = -up
+  'a': { x: -1, y: 0 }, //must = -right
+  'd': { x: 1, y: 0 }
+}
+
 var keyPressed = {
   up: false,
   down: false,
@@ -2276,9 +2295,10 @@ var keyPressed = {
   right: false
 }
 
+
 // player info related to game mechanics
 var loc = { x: 0, y: 0 }; //location
-var vel = { x: 0, y: 0 }; //velocity
+var vel = { x: 0, y: 0 }; //velocity. Note vel.y is UP, not down (unlike loc)
 
 var playerRadius = 10
 
@@ -2287,49 +2307,126 @@ var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
-  vel = vector_add(vector_normalized(directionPressed, walkspeed), vector_normalized(boostDir, walkspeed * boostMultiplier));
+  console.log(boostDir);
+  vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
 }
-
-
-
-
-// records the previous 3 values of directionPressed to determine boost
-var recentDirs = []; //[3rd most recent movement dir, 2nd most recent movement dir, most recent movement dir]
+/** Boost mechanics:
+ * Two ways to get a boost:
+ * (1) Record the previous 2 keys pressed
+ *     - Condition for boost: recentKeys = [K1 K2 K1] (Ki = key i)
+ * (2) Record the previous 2 values of directionsPressed
+ *     - Condition for boost: recentDirs = [D1 D2 D1] (Di = direction i)
+ * If (1) and (2) both have boost conditions met, (1) overrights (2)
+ * */
+//(2)
+var recentDirs = []; //[3rd, 2nd, 1st most recent movement dir (directionPressed)]
+var dirBoost = false;
 var recentDirs_insert = (dir) => {
   recentDirs[0] = recentDirs[1];
   recentDirs[1] = recentDirs[2];
   recentDirs[2] = dir;
 }
+//(1)
+var recentKeys = []; //[3rd, 2nd, 1st most recent key pressed]
+var keyBoost = false;
+var keyBoostDir = null;
+var recentKeys_insert = (key) => {
+  console.log("replacing key", recentKeys[0])
+  keyBoostDir = keyDirections[recentKeys[0]];
+  recentKeys[0] = recentKeys[1];
+  recentKeys[1] = recentKeys[2];
+  recentKeys[2] = key;
+}
 
-var boostEnabled = false;
 var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
 var boostMultiplier = 0; // this multiplies walkspeed
-var boostDir = { x: 0, y: 0 } //direction of the boost
+var boostDir = null //direction of the boost
 
-var boost_update = () => {
-  console.log(recentDirs[0])
-  console.log(recentDirs[1])
-  console.log(recentDirs[2])
-  console.log("")
-  boostEnabled = vector_nonzero(recentDirs[0]) && vector_nonzero(recentDirs[1])
-    && vector_equals(recentDirs[0], recentDirs[2]) 
-    && !vector_equals(recentDirs[0], recentDirs[1])
-  if (boostEnabled) {
-    boostMultiplier = 1.5;
-    if (boostStreak == 0) { //first boost in this direction
-      boostDir = vector_normalized(vector_add(recentDirs[0], recentDirs[1]));
-      console.log("boostDir", boostDir)
-    }
-    boostStreak++;
-  } else {
+var boost = {
+  keyBoost_end: () => {
+    console.log("ending")
     boostStreak = 0;
     boostMultiplier = 0;
+    boostDir = null;
+
+    keyBoost = false;
+    keyBoostDir = null;
+  },
+  keyBoost_clear: () => {
+    console.log("clearing")
+    boostStreak = 0;
+    boostMultiplier = 0;
+    boostDir = null;
+
+    recentKeys = [];
+    keyBoost = false;
+    keyBoostDir = null;
+  },
+  keyBoost_init: () => {
+    boostDir = keyBoostDir;
+  },
+  dirBoost_init: () => {
+    boostDir = vec.normalized(vec.add(recentDirs[0], recentDirs[1]));
+  },
+  keyBoost_inc: () => {
+    boostMultiplier = 1.5;
+    boostStreak++;
+  },
+  dirBoost_inc: () => {
+    boostMultiplier = 1.5;
+    boostStreak++;
   }
 }
 
+// Assuming that the 3rd value of recentKeys and recentDirs is not null, since 
+// which is true since this is called after a WASD key is pressed.
 
-// sends  loc: {x:, y:, z:}, 
-const sendDefault = () => {
+
+var keyBoost_update_press = () => {
+  console.log(recentKeys);
+  keyBoost = recentKeys[0] === recentKeys[2] //don't need to check null, 1st statement takes care of this
+    && recentKeys[0] !== recentKeys[1];
+
+  if (keyBoost) {
+    boost.keyBoost_inc();
+    if (boostStreak == 1) { //first boost in this direction
+      boost.keyBoost_init();
+    }
+  } 
+  else if (boostStreak > 1) { //end the streak
+    boost.keyBoost_end();
+  }
+}
+var keyBoost_update_release = (keyReleased) => {
+  //this if is for when a key is released to stop the boost:
+  if (keyBoost && !!keyReleased && vec.equals(keyDirections[keyReleased], boostDir)) {
+    boost.keyBoost_clear();
+  }
+}
+
+var dirBoost_update = () => {
+  if (keyBoost) console.log("dirBoost, but keyboost")
+  if (keyBoost) return;
+
+  dirBoost = vec.nonzero(recentDirs[0]) && vec.nonzero(recentDirs[1])
+    && vec.equals(recentDirs[0], recentDirs[2])
+    && !vec.equals(recentDirs[0], recentDirs[1]);
+
+  if (dirBoost) {
+    boost.dirBoost_inc();
+    if (boostStreak == 1) { //first boost in this direction
+      boost.dirBoost_init();
+    }
+  } else {
+    boost.end();
+  }
+
+}
+
+
+
+// run game:
+const sendDefault = () => { // sends  loc: {x:, y:},
   const msg = { loc: loc };
   // const buf2 = Buffer.from('bytes');
   socket.emit('message', loc, /*moreInfo, ... */
@@ -2385,14 +2482,14 @@ canvas.height = HEIGHT;
 var prevtime;
 var starttime;
 
-let drawAndSend = (currtime) => {
+let drawAndSend = (timestamp) => {
   if (starttime === undefined) {
-    starttime = currtime;
-    prevtime = currtime;
+    starttime = timestamp;
+    prevtime = timestamp;
   }
-  let dt = currtime - prevtime;
-  let elapsed = currtime - starttime;
-  prevtime = currtime;
+  let dt = timestamp - prevtime;
+  let currtime = timestamp - starttime;
+  prevtime = timestamp;
 
   // calculate fps
   let fps = Math.round(1000 / dt);
@@ -2457,9 +2554,12 @@ document.addEventListener('keydown', function (event) {
       break;
   }
 
-  if (movementDirChanged) {
-    recentDirs_insert({ ...directionPressed });
-    boost_update();
+  if (movementDirChanged) { //ie WASD was pressed, not some other key
+    recentKeys_insert(key);
+    keyBoost_update_press();
+
+    // recentDirs_insert({ ...directionPressed });
+    // dirBoost_update();
   }
 
   velocity_update();
@@ -2493,8 +2593,10 @@ document.addEventListener('keyup', function (event) {
 
 
   if (movementDirChanged) {
-    recentDirs_insert({ ...directionPressed });
-    boost_update();
+    keyBoost_update_release(key);
+
+    // recentDirs_insert({ ...directionPressed });
+    // dirBoost_update();
   }
 
   velocity_update();
