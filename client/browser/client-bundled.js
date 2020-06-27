@@ -2246,7 +2246,7 @@ var vec = {
   normalized: (a, mag) => {
     if (!mag) {
       if (mag !== 0) mag = 1;
-      else if (mag === 0) return {x:0, y:0};
+      else if (mag === 0) return { x: 0, y: 0 };
     }
     let norm = vec.norm(a);
     return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
@@ -2288,12 +2288,8 @@ var keyDirections = {
   'd': { x: 1, y: 0 }
 }
 
-var keyPressed = {
-  up: false,
-  down: false,
-  left: false,
-  right: false
-}
+// contains 'w', 'a', 's', or 'd'
+var keysPressed = new Set();
 
 
 // player info related to game mechanics
@@ -2307,7 +2303,7 @@ var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
-  console.log(boostDir);
+  // console.log("boostdir", boostDir);
   vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
 }
 /** Boost mechanics:
@@ -2319,20 +2315,10 @@ let velocity_update = () => {
  * If (1) and (2) both have boost conditions met, (1) overrights (2)
  * */
 //(2)
-var recentDirs = []; //[3rd, 2nd, 1st most recent movement dir (directionPressed)]
-var dirBoost = false;
-var recentDirs_insert = (dir) => {
-  recentDirs[0] = recentDirs[1];
-  recentDirs[1] = recentDirs[2];
-  recentDirs[2] = dir;
-}
 //(1)
 var recentKeys = []; //[3rd, 2nd, 1st most recent key pressed]
-var keyBoost = false;
-var keyBoostDir = null;
+var hasBoost = false;
 var recentKeys_insert = (key) => {
-  console.log("replacing key", recentKeys[0])
-  keyBoostDir = keyDirections[recentKeys[0]];
   recentKeys[0] = recentKeys[1];
   recentKeys[1] = recentKeys[2];
   recentKeys[2] = key;
@@ -2340,41 +2326,63 @@ var recentKeys_insert = (key) => {
 
 var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
 var boostMultiplier = 0; // this multiplies walkspeed
-var boostDir = null //direction of the boost
+var boostDir = null; //direction of the boost
+var boostKeys = new Set(); //keys that need to be held down for current boost to be active, i.e. keys not part of the cycle
 
 var boost = {
-  keyBoost_end: () => {
+  end: () => {
     console.log("ending")
     boostStreak = 0;
     boostMultiplier = 0;
     boostDir = null;
+    boostKeys.clear();
 
-    keyBoost = false;
-    keyBoostDir = null;
+    hasBoost = false;
   },
-  keyBoost_clear: () => {
+  clear: () => {
     console.log("clearing")
     boostStreak = 0;
     boostMultiplier = 0;
     boostDir = null;
+    boostKeys.clear();
 
     recentKeys = [];
-    keyBoost = false;
-    keyBoostDir = null;
+    hasBoost = false;
   },
-  keyBoost_init: () => {
-    boostDir = keyBoostDir;
+  // if 1 key cycle, cycleSize = 1, else if 2 key cycle cycleSize = 2
+  // assumes hasCycle is true, that's why we're initting
+  init: () => {
+    // updates boostDir and boostKeys
+    let dir = { x: 0, y: 0 };
+    let cycleSize = keysPressed.size-1;
+    console.log("cycleSize", cycleSize)
+    console.log("KEYSPRESSED", keysPressed)
+    if (cycleSize == 1) {
+      keysPressed.forEach((key) => {
+        console.log("KEY1", key);
+        dir = vec.add(dir, keyDirections[key]);
+        if (key !== recentKeys[0]) boostKeys.add(key);
+      });
+    } else if (cycleSize == 2) {
+      keysPressed.forEach((key) => {
+        console.log("KEY1", key);
+        dir = vec.add(dir, keyDirections[key]);
+        if (key !== recentKeys[0] && key !== recentKeys[1]) boostKeys.add(key);
+      });
+    }
+    dir = vec.normalized(dir);
+    boostDir = dir;
   },
-  dirBoost_init: () => {
-    boostDir = vec.normalized(vec.add(recentDirs[0], recentDirs[1]));
-  },
-  keyBoost_inc: () => {
-    boostMultiplier = 1.5;
+  inc: () => {
+    boostMultiplier += 1 / 2;
     boostStreak++;
   },
-  dirBoost_inc: () => {
-    boostMultiplier = 1.5;
-    boostStreak++;
+  hasBoostKeysPressed: () => {
+    if (!hasBoost) return true;
+    for (let elt in boostKeys) {
+      if (!keysPressed.has(elt)) return false;
+    }
+    return true;
   }
 }
 
@@ -2382,46 +2390,29 @@ var boost = {
 // which is true since this is called after a WASD key is pressed.
 
 
-var keyBoost_update_press = () => {
-  console.log(recentKeys);
-  keyBoost = recentKeys[0] === recentKeys[2] //don't need to check null, 1st statement takes care of this
-    && recentKeys[0] !== recentKeys[1];
+var boost_update_onPress = () => {
+  console.log("reckeys", recentKeys);
+  hasBoost = recentKeys[0] === recentKeys[2] //don't need to check null, 1st statement takes care of this
+    && (keysPressed.size == 2 || keysPressed.size == 3) //if not alternating between 2+ keys, can't possibly boost
+    && boost.hasBoostKeysPressed(); //the required boost keys are pressed (or user doesn't yet have boost)
 
-  if (keyBoost) {
-    boost.keyBoost_inc();
-    if (boostStreak == 1) { //first boost in this direction
-      boost.keyBoost_init();
+  if (hasBoost) {
+    if (boostStreak == 0) { //first boost in this direction
+      boost.init();
     }
-  } 
+    boost.inc();
+  }
   else if (boostStreak > 1) { //end the streak
-    boost.keyBoost_end();
+    boost.clear();
   }
 }
-var keyBoost_update_release = (keyReleased) => {
+var boost_update_onRelease = (keyReleased) => {
   //this if is for when a key is released to stop the boost:
-  if (keyBoost && !!keyReleased && vec.equals(keyDirections[keyReleased], boostDir)) {
-    boost.keyBoost_clear();
+  if (hasBoost && boostKeys.has(keyReleased)) {
+    boost.clear();
   }
 }
 
-var dirBoost_update = () => {
-  if (keyBoost) console.log("dirBoost, but keyboost")
-  if (keyBoost) return;
-
-  dirBoost = vec.nonzero(recentDirs[0]) && vec.nonzero(recentDirs[1])
-    && vec.equals(recentDirs[0], recentDirs[2])
-    && !vec.equals(recentDirs[0], recentDirs[1]);
-
-  if (dirBoost) {
-    boost.dirBoost_inc();
-    if (boostStreak == 1) { //first boost in this direction
-      boost.dirBoost_init();
-    }
-  } else {
-    boost.end();
-  }
-
-}
 
 
 
@@ -2518,37 +2509,38 @@ let drawAndSend = (timestamp) => {
 
 
 
-
+// TODO fix S D S from start, REMOVE DIRBOOST,
+// d d d d ... is the corresponding dirboost
 
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
   let movementDirChanged = false;
   switch (key) {
     case keyBindings["up"]:
-      if (!keyPressed.up) {
+      if (!keysPressed.has(key)) {
         directionPressed.y += 1;
-        keyPressed.up = true;
+        keysPressed.add(key);
         movementDirChanged = true;
       }
       break;
     case keyBindings["down"]:
-      if (!keyPressed.down) {
+      if (!keysPressed.has(key)) {
         directionPressed.y += -1;
-        keyPressed.down = true;
+        keysPressed.add(key);
         movementDirChanged = true;
       }
       break;
     case keyBindings["left"]:
-      if (!keyPressed.left) {
+      if (!keysPressed.has(key)) {
         directionPressed.x += -1;
-        keyPressed.left = true;
+        keysPressed.add(key);
         movementDirChanged = true;
       }
       break;
     case keyBindings["right"]:
-      if (!keyPressed.right) {
+      if (!keysPressed.has(key)) {
         directionPressed.x += 1;
-        keyPressed.right = true;
+        keysPressed.add(key);
         movementDirChanged = true;
       }
       break;
@@ -2556,10 +2548,7 @@ document.addEventListener('keydown', function (event) {
 
   if (movementDirChanged) { //ie WASD was pressed, not some other key
     recentKeys_insert(key);
-    keyBoost_update_press();
-
-    // recentDirs_insert({ ...directionPressed });
-    // dirBoost_update();
+    boost_update_onPress();
   }
 
   velocity_update();
@@ -2571,29 +2560,29 @@ document.addEventListener('keyup', function (event) {
   switch (key) {
     case keyBindings["up"]:
       directionPressed.y -= 1;
-      keyPressed.up = false;
+      keysPressed.delete(key);
       movementDirChanged = true;
       break;
     case keyBindings["down"]:
       directionPressed.y -= -1;
-      keyPressed.down = false;
+      keysPressed.delete(key);
       movementDirChanged = true;
       break;
     case keyBindings["left"]:
       directionPressed.x -= -1;
-      keyPressed.left = false;
+      keysPressed.delete(key);
       movementDirChanged = true;
       break;
     case keyBindings["right"]:
       directionPressed.x -= 1;
-      keyPressed.right = false;
+      keysPressed.delete(key);
       movementDirChanged = true;
       break;
   }
 
 
   if (movementDirChanged) {
-    keyBoost_update_release(key);
+    boost_update_onRelease(key);
 
     // recentDirs_insert({ ...directionPressed });
     // dirBoost_update();
