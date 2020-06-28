@@ -78,6 +78,7 @@ var keyDirections = {
   'd': "right"
 }
 
+//returns true iff key 1 is parallel and in the opposite direction to key 2 
 var keyDirection_isOpposite = (key1, key2) => {
   let [d1, d2] = [keyDirections[key1], keyDirections[key2]];
   switch (d1) {
@@ -88,6 +89,7 @@ var keyDirection_isOpposite = (key1, key2) => {
   }
 }
 
+// list of all keys currently pressed that are orthogonal to key k
 var keysPressed_orthogonalTo = (k) => {
   let ret = [];
   switch (keyDirections[k]) {
@@ -100,6 +102,35 @@ var keysPressed_orthogonalTo = (k) => {
     case "down":
       if (keysPressed.has(keyBindings["left"])) ret.push(keyBindings["left"]);
       if (keysPressed.has(keyBindings["right"])) ret.push(keyBindings["right"]);
+      break;
+  }
+  return ret;
+}
+
+// if k is null, there is no orthogonal key to a and b being pressed, or there are 2
+// if k is not, it's the single key pressed that's orthogonal to key k
+var keysPressed_singleOrthogonalTo = (k) => {
+  let ret = null;
+  switch (keyDirections[k]) {
+    case "left":
+    case "right":
+      if (keysPressed.has(keyBindings["up"])) ret = keyBindings["up"];
+      if (keysPressed.has(keyBindings["down"])) {
+        if (ret) ret = null;
+        else {
+          ret = keyBindings["down"];
+        }
+      }
+      break;
+    case "up":
+    case "down":
+      if (keysPressed.has(keyBindings["left"])) ret = keyBindings["left"];
+      if (keysPressed.has(keyBindings["right"])) {
+        if (ret) ret = null;
+        else {
+          ret = keyBindings["right"];
+        }
+      }
       break;
   }
   return ret;
@@ -139,58 +170,69 @@ var recentKeys_insert = (key) => {
   recentKeys[1] = key;
 }
 
+var boostMultiplier = 0, // fraction of walkspeed to add to velocity
+  boostDir = null, // direction of the boost **this is null iff there is no boost**
+  boostKey = null; // key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
 
-var boostMultiplier = 0; // fraction of walkspeed to add to velocity
-var boostDir = null; // direction of the boost
-var boostKey = null; // key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
-
+var boostReset = () => {
+  boostMultiplier = 0;
+  boostDir = null;
+  boostKey = null;
+}
+// creates a boost in direction of key k, with boostMultipler increased by inc
+var boostAdd = (k, inc) => {
+  boostDir = keyVectors[k];
+  boostKey = k;
+  boostMultiplier += inc || 0;
+}
 
 // Can assume that the 2nd value of recentKeys is not null, since 
 // which is true since this is called after a WASD key is pressed
-// updates boostDir and boostKeyReq
+// updates boostDir and boostKey
 var boost_updateOnPress = () => {
   let a = recentKeys[0];
   let b = recentKeys[1];
   if (!a) return;
   //note b is guaranteed to exist since a key was just pressed
 
-  // c is the BOOST DIRECTION!!! (or null if no boost)
-  let c = null;
+  let c = null; // c is the key of the BOOST DIRECTION!!! (or null if no boost)
+  let inc = null; // inc is the boostMultiplier increase if a boost is given
 
-  
-  let boost =false;
   // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
   if (keyDirection_isOpposite(a, b)) {
-    let orthogs = keysPressed_orthogonalTo(a);
-    c = orthogs.length === 1 ? orthogs[0] : null;
-    boost=true;
-    console.log("boosting start", keyDirections[c]);
-
-    // if c is null, there is no orthogonal key to a and b, or there are 2
+    c = keysPressed_singleOrthogonalTo(b);
+    inc = .5;
   }
   // (2) continue boost into new direction
-  else if (boostDir){
-    if (keysPressed.size === 2){
-      // one in new dir, key you just pressed is opposite of current boost dir
-      if (keyDirection_isOpposite(b,))
+  // one key in new dir, key you just pressed is opposite of current boost dir
+  else if (boostDir) {
+    if (keyDirection_isOpposite(b, boostKey)) {
+      c = keysPressed_singleOrthogonalTo(b);
     }
-    if (keyDirection_isOpposite(b, boostKey)) c = a;
-    console.log("boosting continue", keyDirections[c]);
   }
+
+
+
 
   // if we have a boost direction, go!
   if (c) {
-    boostDir = keyVectors[c];
-    boostKey = c;
-    if (boost) boostMultiplier += .5;
+    console.log("boosting", keyDirections[c]);
+    console.log("key:", c);
+    boostAdd(c, inc);
+
+  } else { //else, reset boost
+    boostReset();
   }
 }
 
 var boost_updateOnRelease = (keyReleased) => {
-  // if (boostKeyReq) { // W and A/D boost
-  //   if (keyReleased === boostKeyReq) boostMultiplier = 0;
-  // }
+  if (boostKey) { // W and A/D boost
+    if (keysPressed.size === 0
+      || (keyReleased === boostKey && keysPressed.size !== 1)) { //reset boost
 
+      boostReset();
+    }
+  }
 }
 
 
@@ -360,9 +402,6 @@ document.addEventListener('keyup', function (event) {
 
   if (movementDirChanged) {
     boost_updateOnRelease(key);
-
-    // recentDirs_insert({ ...directionPressed });
-    // dirBoost_update();
   }
 
   velocity_update();
