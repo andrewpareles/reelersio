@@ -216,10 +216,12 @@ var boost_updateOnPress = () => {
 
   // if we have a boost direction, go!
   if (c) {
-    console.log("boosting", keyDirections[c]);
-    console.log("key:", c);
-    boostAdd(c, inc);
 
+    console.log("boost " + (inc ? "continue" : "start"), keyDirections[c]);
+    console.log("key:", c);
+
+
+    boostAdd(c, inc);
   } else { //else, reset boost
     boostReset();
   }
