@@ -2238,7 +2238,7 @@ var vec = {
 
   // vector is not null, and doesnt contain all falsy values (including 0)
   nonzero: (a) => {
-    return !!a && (!!a.x || !!a.y)
+    return !!a && (!!a.x || !!a.y);
   },
 
   // if unnormalizable, return the 0 vector. 
@@ -2282,6 +2282,41 @@ var keyBindings = {
 }
 
 var keyDirections = {
+  'w': "up",
+  's': "down",
+  'a': "left",
+  'd': "right"
+}
+
+var keyDirection_isOpposite = (key1, key2) => {
+  let [d1, d2] = [keyDirections[key1], keyDirections[key2]];
+  switch (d1) {
+    case "left": return d2 === "right";
+    case "right": return d2 === "left";
+    case "up": return d2 === "down";
+    case "down": return d2 === "up";
+  }
+}
+
+var keysPressed_orthogonalTo = (k) => {
+  let ret = [];
+  switch (keyDirections[k]) {
+    case "left":
+    case "right":
+      if (keysPressed.has(keyBindings["up"])) ret.push(keyBindings["up"]);
+      if (keysPressed.has(keyBindings["down"])) ret.push(keyBindings["down"]);
+      break;
+    case "up":
+    case "down":
+      if (keysPressed.has(keyBindings["left"])) ret.push(keyBindings["left"]);
+      if (keysPressed.has(keyBindings["right"])) ret.push(keyBindings["right"]);
+      break;
+  }
+  return ret;
+}
+
+// assumes these are normalized
+var keyVectors = {
   'w': { x: 0, y: 1 },
   's': { x: 0, y: -1 }, //must = -up
   'a': { x: -1, y: 0 }, //must = -right
@@ -2303,88 +2338,69 @@ var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
-  vel = vec.normalized(directionPressed, walkspeed * (1 + boostMultiplier));
+  vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
 }
-/** Boost mechanics:
- * Record the previous 3 keys pressed
- * - Condition for boost: recentKeys = [K1 K2 K1] (Ki = key i)
- * */
-var recentKeys = []; //[3rd, 2nd, 1st most recent key pressed]
-var hasBoost = false;
+
+// --- BOOSTING ---
+// Record the previous 2 keys pressed
+var recentKeys = []; //[2nd, 1st most recent key pressed]
 var recentKeys_insert = (key) => {
   recentKeys[0] = recentKeys[1];
-  recentKeys[1] = recentKeys[2];
-  recentKeys[2] = key;
+  recentKeys[1] = key;
 }
 
-var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
+
 var boostMultiplier = 0; // fraction of walkspeed to add to velocity
-var boostKeyReq = null; //key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
+var boostDir = null; // direction of the boost
+var boostKey = null; // key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
 
-var boost = {
-  end: () => {
-    console.log("ending")
-    boostStreak = 0;
-    boostMultiplier = 0;
-    boostKeyReq = null;
 
-    hasBoost = false;
-  },
-  clear: () => {
-    console.log("clearing")
-    boostStreak = 0;
-    boostMultiplier = 0;
-    boostKeyReq = null;
-
-    recentKeys = [];
-    hasBoost = false;
-  },
-  init: () => {
-    //assumes hasCycle boost criterion are true
-    // updates boostKey: boostKey = key pressed (if any) not in cycle
-    // think W with A and D tapping (alternating), or alternating W and D.
-    for (let key of keysPressed.values()) {
-      if (key !== recentKeys[0] && key !== recentKeys[1]) {
-        boostKeyReq = key;
-        break;
-      }
-    }
-  },
-  inc: () => {
-    boostMultiplier += 1 / 2;
-    boostStreak++;
-  },
-  hasBoostKeyReqPressed: () => {
-    if (!hasBoost) return true;
-    return !boostKeyReq || keysPressed.has(boostKeyReq);
-  }
-}
-
-// Assuming that the 3rd value of recentKeys and recentDirs is not null, since 
+// Can assume that the 2nd value of recentKeys is not null, since 
 // which is true since this is called after a WASD key is pressed
-var boost_update_onPress = () => {
-  // console.log("reckeys", recentKeys)
-  hasBoost = recentKeys[0] === recentKeys[2] //don't need to check null, this takes care of this since recentkeys[2] not null
-    && recentKeys[0] !== recentKeys[1] //cycle size = 2
-    // && (keysPressed.size == 2 || keysPressed.size == 3) //this is max # keys pressed at a time during boost. need 2 to alternate (W D tap), 3 to alternate and have a direction (W and A/D tap), 4 we don't want
-    && boost.hasBoostKeyReqPressed(); //the required boost key is pressed (or user doesn't yet have boost)
+// updates boostDir and boostKeyReq
+var boost_updateOnPress = () => {
+  let a = recentKeys[0];
+  let b = recentKeys[1];
+  if (!a) return;
+  //note b is guaranteed to exist since a key was just pressed
 
-  if (hasBoost && !recentKeys[1]) {console.log("recentKeys[1] was undefined: ", recentKeys[1]); }
-  if (hasBoost) {
-    if (boostStreak === 0) { //first boost in this direction
-      boost.init();
-    }
-    boost.inc();
-  } else if (boostStreak > 1) { //end the streak
-    boost.clear();
+  // c is the BOOST DIRECTION!!! (or null if no boost)
+  let c = null;
+
+  
+  let boost =false;
+  // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
+  if (keyDirection_isOpposite(a, b)) {
+    let orthogs = keysPressed_orthogonalTo(a);
+    c = orthogs.length === 1 ? orthogs[0] : null;
+    boost=true;
+    console.log("boosting start", keyDirections[c]);
+
+    // if c is null, there is no orthogonal key to a and b, or there are 2
+  }
+  // (2) continue boost into new direction
+  // else if (boostDir){
+  //   if (keysPressed.size === 2){
+  //     // one in new dir, one in opposite, key you just pressed is opposite
+  //     if (keyDirection_isOpposite(b,))
+  //   }
+  //   if (keyDirection_isOpposite(b, boostKey)) c = a;
+  //   console.log("boosting continue", keyDirections[c]);
+  // }
+
+  // if we have a boost direction, go!
+  if (c) {
+    boostDir = keyVectors[c];
+    boostKey = c;
+    if (boost) boostMultiplier += .5;
   }
 }
-var boost_update_onRelease = (keyReleased) => {
-  //this if is for when a key is released to stop the boost:
-  if (hasBoost) {
-    if (!!boostKeyReq && boostKeyReq === keyReleased) // if you released a required boost key
-      boost.clear();
-  }
+
+var boost_updateOnRelease = (keyReleased) => {
+  // if (boostKeyReq) { // W and A/D boost
+  //   if (keyReleased === boostKeyReq) boostMultiplier = 0;
+  // }
+
 }
 
 
@@ -2483,9 +2499,6 @@ let drawAndSend = (timestamp) => {
 
 
 
-// TODO fix S D S from start, REMOVE DIRBOOST,
-// d d d d ... is the corresponding dirboost
-
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
   let movementDirChanged = false;
@@ -2522,7 +2535,7 @@ document.addEventListener('keydown', function (event) {
 
   if (movementDirChanged) { //ie WASD was pressed, not some other key
     recentKeys_insert(key);
-    boost_update_onPress();
+    boost_updateOnPress();
   }
 
   velocity_update();
@@ -2556,7 +2569,7 @@ document.addEventListener('keyup', function (event) {
 
 
   if (movementDirChanged) {
-    boost_update_onRelease(key);
+    boost_updateOnRelease(key);
 
     // recentDirs_insert({ ...directionPressed });
     // dirBoost_update();
