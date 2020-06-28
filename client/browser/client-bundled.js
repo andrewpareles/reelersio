@@ -2303,19 +2303,12 @@ var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
-  // console.log("boostdir", boostDir);
-  vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
+  vel = vec.normalized(directionPressed, walkspeed * (1 + boostMultiplier));
 }
 /** Boost mechanics:
- * Two ways to get a boost:
- * (1) Record the previous 2 keys pressed
- *     - Condition for boost: recentKeys = [K1 K2 K1] (Ki = key i)
- * (2) Record the previous 2 values of directionsPressed
- *     - Condition for boost: recentDirs = [D1 D2 D1] (Di = direction i)
- * If (1) and (2) both have boost conditions met, (1) overrights (2)
+ * Record the previous 3 keys pressed
+ * - Condition for boost: recentKeys = [K1 K2 K1] (Ki = key i)
  * */
-//(2)
-//(1)
 var recentKeys = []; //[3rd, 2nd, 1st most recent key pressed]
 var hasBoost = false;
 var recentKeys_insert = (key) => {
@@ -2325,17 +2318,15 @@ var recentKeys_insert = (key) => {
 }
 
 var boostStreak = 0; // number of times someone got a boost in a row (LR=0, LRL=1, ...)
-var boostMultiplier = 0; // this multiplies walkspeed
-var boostDir = null; //direction of the boost
-var boostKeys = new Set(); //keys that need to be held down for current boost to be active, i.e. keys not part of the cycle
+var boostMultiplier = 0; // fraction of walkspeed to add to velocity
+var boostKeyReq = null; //key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
 
 var boost = {
   end: () => {
     console.log("ending")
     boostStreak = 0;
     boostMultiplier = 0;
-    boostDir = null;
-    boostKeys.clear();
+    boostKeyReq = null;
 
     hasBoost = false;
   },
@@ -2343,73 +2334,56 @@ var boost = {
     console.log("clearing")
     boostStreak = 0;
     boostMultiplier = 0;
-    boostDir = null;
-    boostKeys.clear();
+    boostKeyReq = null;
 
     recentKeys = [];
     hasBoost = false;
   },
-  // if 1 key cycle, cycleSize = 1, else if 2 key cycle cycleSize = 2
-  // assumes hasCycle is true, that's why we're initting
   init: () => {
-    // updates boostDir and boostKeys
-    let dir = { x: 0, y: 0 };
-    let cycleSize = keysPressed.size-1;
-    console.log("cycleSize", cycleSize)
-    console.log("KEYSPRESSED", keysPressed)
-    if (cycleSize == 1) {
-      keysPressed.forEach((key) => {
-        console.log("KEY1", key);
-        dir = vec.add(dir, keyDirections[key]);
-        if (key !== recentKeys[0]) boostKeys.add(key);
-      });
-    } else if (cycleSize == 2) {
-      keysPressed.forEach((key) => {
-        console.log("KEY1", key);
-        dir = vec.add(dir, keyDirections[key]);
-        if (key !== recentKeys[0] && key !== recentKeys[1]) boostKeys.add(key);
-      });
+    //assumes hasCycle boost criterion are true
+    // updates boostKey: boostKey = key pressed (if any) not in cycle
+    // think W with A and D tapping (alternating), or alternating W and D.
+    for (let key of keysPressed.values()) {
+      if (key !== recentKeys[0] && key !== recentKeys[1]) {
+        boostKeyReq = key;
+        break;
+      }
     }
-    dir = vec.normalized(dir);
-    boostDir = dir;
   },
   inc: () => {
     boostMultiplier += 1 / 2;
     boostStreak++;
   },
-  hasBoostKeysPressed: () => {
+  hasBoostKeyReqPressed: () => {
     if (!hasBoost) return true;
-    for (let elt in boostKeys) {
-      if (!keysPressed.has(elt)) return false;
-    }
-    return true;
+    return !boostKeyReq || keysPressed.has(boostKeyReq);
   }
 }
 
 // Assuming that the 3rd value of recentKeys and recentDirs is not null, since 
-// which is true since this is called after a WASD key is pressed.
-
-
+// which is true since this is called after a WASD key is pressed
 var boost_update_onPress = () => {
-  console.log("reckeys", recentKeys);
-  hasBoost = recentKeys[0] === recentKeys[2] //don't need to check null, 1st statement takes care of this
-    && (keysPressed.size == 2 || keysPressed.size == 3) //if not alternating between 2+ keys, can't possibly boost
-    && boost.hasBoostKeysPressed(); //the required boost keys are pressed (or user doesn't yet have boost)
+  // console.log("reckeys", recentKeys)
+  hasBoost = recentKeys[0] === recentKeys[2] //don't need to check null, this takes care of this since recentkeys[2] not null
+    && recentKeys[0] !== recentKeys[1] //cycle size = 2
+    // && (keysPressed.size == 2 || keysPressed.size == 3) //this is max # keys pressed at a time during boost. need 2 to alternate (W D tap), 3 to alternate and have a direction (W and A/D tap), 4 we don't want
+    && boost.hasBoostKeyReqPressed(); //the required boost key is pressed (or user doesn't yet have boost)
 
+  if (hasBoost && !recentKeys[1]) {console.log("recentKeys[1] was undefined: ", recentKeys[1]); }
   if (hasBoost) {
-    if (boostStreak == 0) { //first boost in this direction
+    if (boostStreak === 0) { //first boost in this direction
       boost.init();
     }
     boost.inc();
-  }
-  else if (boostStreak > 1) { //end the streak
+  } else if (boostStreak > 1) { //end the streak
     boost.clear();
   }
 }
 var boost_update_onRelease = (keyReleased) => {
   //this if is for when a key is released to stop the boost:
-  if (hasBoost && boostKeys.has(keyReleased)) {
-    boost.clear();
+  if (hasBoost) {
+    if (!!boostKeyReq && boostKeyReq === keyReleased) // if you released a required boost key
+      boost.clear();
   }
 }
 
