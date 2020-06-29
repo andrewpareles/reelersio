@@ -216,8 +216,8 @@ var boost_updateOnPress = () => {
 
   // if we have a boost direction, go!
   if (c) {
-    console.log("boost " + (inc ? "continue" : "start"), keyDirections[c]);
-    console.log("key:", c);
+    // console.log("boost " + (inc ? "continue" : "start"), keyDirections[c]);
+    // console.log("key:", c);
     boostAdd(c, inc);
   }
   //else, reset boost
@@ -239,30 +239,52 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
-// run game:
-const sendDefault = () => { // sends  loc: {x:, y:},
-  const msg = { loc: loc };
-  // const buf2 = Buffer.from('bytes');
-  socket.emit('message', loc, /*moreInfo, ... */
-  );
-
-}
-
-
-
-
 
 // returns a new function to execute and a promise that resolves when the new function executes
 // returns [new_fn, promise]
-const waitForExecutionPair = (callback) => {
+const getWaitForExecutionPair = (callback) => {
   let r;
+  //promise only resolves after new_fn is called, which runs callback(...args) 
   const promise = new Promise((res, rej) => { r = res; });
   let new_fn = (...args) => {
     callback(...args);
     r();
   }
   return [new_fn, promise];
+};
+
+
+
+var sent = {
+  loc: null,
+
 }
+
+
+const send = {
+  // sent when you join the game (newplayer):
+  newPlayer: async (callback) => {
+    const [new_callback, new_promise] = getWaitForExecutionPair(callback);
+    socket.emit('newplayer', username, new_callback);
+
+    await new_promise;
+  },
+  // default movement message (message):
+  loc: () => { // sends  loc: {x:, y:},
+    if (!vec.equals(sent.loc, loc)) {
+      const msg = { loc: loc };
+      // const buf2 = Buffer.from('bytes');
+      socket.emit('message', loc,);
+      sent.loc = { ...loc };
+    }
+  },
+
+}
+
+
+
+
+
 
 const clientRunGame = async () => {
   // 1. tell server I'm a new player
@@ -270,10 +292,8 @@ const clientRunGame = async () => {
     world = serverWorld;
     users = serverUsers;
   };
-  const [new_callback, newplayer_ack] = waitForExecutionPair(callback);
-  socket.emit('newplayer', username, new_callback);
 
-  await newplayer_ack;
+  await send.newPlayer(callback);
   // once get here, know the callback was run  
 
   // 2. start game
@@ -295,6 +315,7 @@ canvas.height = HEIGHT;
 
 var prevtime;
 var starttime;
+var currtime;
 
 let drawAndSend = (timestamp) => {
   if (starttime === undefined) {
@@ -302,11 +323,16 @@ let drawAndSend = (timestamp) => {
     prevtime = timestamp;
   }
   let dt = timestamp - prevtime;
-  let currtime = timestamp - starttime;
+  currtime = timestamp - starttime;
   prevtime = timestamp;
 
   // calculate fps
   let fps = Math.round(1000 / dt);
+
+  // console.log("currtime", currtime)
+
+  // update velocity from key presses
+  velocity_update(currtime);
 
   // update location
   loc.x += vel.x * dt;
@@ -322,12 +348,12 @@ let drawAndSend = (timestamp) => {
   // console.log("fps: ", fps);
 
   // if update position, send info to server
-  sendDefault();
+  send.loc();
   // console.log("world, users", world, users);
-  // document.getElementById("fpsbox").innerText = fps;
 
   window.requestAnimationFrame(drawAndSend);
 }
+
 
 
 
@@ -370,8 +396,6 @@ document.addEventListener('keydown', function (event) {
     recentKeys_insert(key);
     boost_updateOnPress();
   }
-
-  velocity_update();
 });
 
 document.addEventListener('keyup', function (event) {
@@ -404,8 +428,6 @@ document.addEventListener('keyup', function (event) {
   if (movementDirChanged) {
     boost_updateOnRelease(key);
   }
-
-  velocity_update();
 });
 
 
