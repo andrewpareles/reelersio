@@ -1,7 +1,7 @@
 //https://socket.io/docs/client-api/
 const io = require('socket.io-client');
 
-const ADDRESS = 'http://localhost:3000';
+const ADDRESS = 'http://localhost:3001';
 const socket = io(ADDRESS);
 
 //vector functions on {x: , y:}:
@@ -274,11 +274,12 @@ let runGame = (timestamp) => {
   let dt = timestamp - prevtime;
   currtime = timestamp - starttime;
   prevtime = timestamp;
-
+  // console.log("currtime", currtime)
+  
   // calculate fps
   let fps = Math.round(1000 / dt);
-
-  // console.log("currtime", currtime)
+  // console.log("fps: ", fps);
+  
 
   // update velocity from key presses
   velocity_update(currtime);
@@ -291,10 +292,19 @@ let runGame = (timestamp) => {
   //render
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
-  c.beginPath()
+  // draw me
+  c.beginPath();
+  c.strokeStyle = "black";
   c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
   c.stroke();
-  // console.log("fps: ", fps);
+
+  for (let p in players){
+    let ploc = players[p].loc;
+    c.beginPath();
+    c.strokeStyle = "#FF0000";
+    c.arc(ploc.x, ploc.y, playerRadius, 0, 2 * Math.PI);
+    c.stroke();
+  }
 
   // if update position, send info to server
   send.loc();
@@ -423,8 +433,11 @@ Socket events received:
 
 
 const whenConnect = async () => {
+  console.log("me", socket.id);
   // 1. tell server I'm a new player
   await send.join();
+  console.log("players", players);
+
   // once get here, know that world, players, and loc are defined  
   // 2. start game
   window.requestAnimationFrame(runGame);
@@ -434,6 +447,7 @@ socket.on('connect', whenConnect);
 
 
 const playerJoin = (playerid, usern, loc) => {
+  console.log("player joining", playerid, usern, loc);
   players[playerid] = {};
   players[playerid].loc = loc;
   players[playerid].username = usern;
@@ -442,6 +456,7 @@ socket.on('playerjoin', playerJoin);
 
 
 const playerMove = (playerid, newLoc) => {
+  // console.log("player moved", playerid, newLoc);
   players[playerid].loc = newLoc;
 }
 socket.on('playermove', playerMove);
@@ -449,7 +464,8 @@ socket.on('playermove', playerMove);
 
 
 const playerDisconnect = (playerid) => {
-  players.delete(playerid);
+  console.log("player left", playerid);
+  delete players[playerid];
 }
 socket.on('playerdisconnect', playerDisconnect);
 

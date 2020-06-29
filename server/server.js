@@ -13,15 +13,15 @@ var world = {
 
 
 const generateRandomLocation = () => {
-  return {x: 10, y: 10};
+  return { x: 10, y: 10 };
 }
 
 //callback(world, users, startLoc)
 const onJoin = socket => (username, callback) => {
-  const loc = generateRandomLocation();
+  let loc = generateRandomLocation();
   callback(world, players, loc);
-  players[socket.id] = {loc: loc, username: username};
-  
+  players[socket.id] = { loc: loc, username: username };
+  socket.broadcast.emit('playerjoin', socket.id, username, loc);
   console.log(`connected socket.id: ${socket.id}`);
   console.log(`users: ${JSON.stringify(players, null, 3)}`);
 
@@ -34,12 +34,12 @@ const onJoin = socket => (username, callback) => {
 
 
 // fired when client connects
- io.on('connection', (socket) => {
-   //set what server does on different events
-   
+io.on('connection', (socket) => {
+  //set what server does on different events
+
   socket.on('join', onJoin(socket));
 
-  socket.on('loc', (newLoc, ) => {
+  socket.on('loc', (newLoc,) => {
     let playerid = socket.id;
     console.log(`location update (server end): ${JSON.stringify(newLoc)}`);
     players[playerid].loc = newLoc;
@@ -48,11 +48,11 @@ const onJoin = socket => (username, callback) => {
 
   socket.on('disconnect', (reason) => {
     delete players[socket.id];
-    socket.broadcast.emit(socket.id);
+    socket.broadcast.emit('playerdisconnect', socket.id);
   });
 });
 
 
-server.listen(3000, function(){
-  console.log('listening on *:3000');
+server.listen(3001, function () {
+  console.log('listening on *:3001');
 });
