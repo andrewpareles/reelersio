@@ -81,7 +81,7 @@ var world = null;
 // once initialized, 
 //players = {
 //  socket.id0: {
-//    loc: {x:0, y:0, z:0},
+//    loc: {x:0, y:0},
 //    username: user1
 //  }, ...
 //}
@@ -450,9 +450,7 @@ socket.on('connect', whenConnect);
 
 const playerJoin = (playerid, usern, loc) => {
   console.log("player joining", playerid, usern, loc);
-  players[playerid] = {};
-  players[playerid].loc = loc;
-  players[playerid].username = usern;
+  players[playerid] = {loc: loc, username: usern};
   console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
