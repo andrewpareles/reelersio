@@ -65,13 +65,10 @@ var send = {
     socket.emit('join', username, new_callback);
     await new_promise;
   },
-  // default movement message (loc):
+  // sent to update your location to the server (loc):
   loc: () => { // sends  loc: {x:, y:},
-    if (!vec.equals(sent.loc, loc)) {
-      // const buf2 = Buffer.from('bytes');
-      socket.emit('loc', loc,);
-      sent.loc = { ...loc };
-    }
+    // const buf2 = Buffer.from('bytes');
+    socket.emit('loc', loc,);
   },
 }
 
@@ -105,6 +102,9 @@ var keyDirections = {
   'a': "left",
   'd': "right"
 }
+
+// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
+var keysPressed = new Set();
 
 //returns true iff key 1 is parallel and in the opposite direction to key 2 
 var keyDirection_isOpposite = (key1, key2) => {
@@ -154,8 +154,6 @@ var keyVectors = {
   'd': { x: 1, y: 0 }
 }
 
-// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
-var keysPressed = new Set();
 
 
 // player info related to game mechanics
@@ -275,11 +273,11 @@ let runGame = (timestamp) => {
   currtime = timestamp - starttime;
   prevtime = timestamp;
   // console.log("currtime", currtime)
-  
+
   // calculate fps
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
-  
+
 
   // update velocity from key presses
   velocity_update(currtime);
@@ -298,7 +296,7 @@ let runGame = (timestamp) => {
   c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
   c.stroke();
 
-  for (let p in players){
+  for (let p in players) {
     let ploc = players[p].loc;
     c.beginPath();
     c.strokeStyle = "#FF0000";
@@ -307,7 +305,11 @@ let runGame = (timestamp) => {
   }
 
   // if update position, send info to server
-  send.loc();
+  if (!vec.equals(sent.loc, loc)) {
+    console.log("sending loc");
+    send.loc();
+    sent.loc = { ...loc };
+  }
   // console.log("world, players", world, players);
 
   window.requestAnimationFrame(runGame);
@@ -451,6 +453,7 @@ const playerJoin = (playerid, usern, loc) => {
   players[playerid] = {};
   players[playerid].loc = loc;
   players[playerid].username = usern;
+  console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
 
@@ -466,6 +469,7 @@ socket.on('playermove', playerMove);
 const playerDisconnect = (playerid) => {
   console.log("player left", playerid);
   delete players[playerid];
+  console.log("players", players);
 }
 socket.on('playerdisconnect', playerDisconnect);
 
