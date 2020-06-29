@@ -2,9 +2,9 @@
 var server = require('http').Server();
 var io = require('socket.io')(server);
 
-var users = {
+var players = {
   // socket.id0: {
-  //   location: {x:0, y:0, z:0},
+  //   location: {x:0, y:0},
   // }
 };
 var world = {
@@ -16,15 +16,15 @@ const generateRandomLocation = () => {
   return {x: 10, y: 10};
 }
 
-//callback(world, users)
-const onNewPlayer = socket => (username, callback) => {
+//callback(world, users, startLoc)
+const onJoin = socket => (username, callback) => {
   const loc = generateRandomLocation();
-  users[socket.id] = {location: loc, username: username}
+  callback(world, players, loc);
+  players[socket.id] = {loc: loc, username: username};
   
   console.log(`connected socket.id: ${socket.id}`);
-  console.log(`users: ${JSON.stringify(users, null, 3)}`);
+  console.log(`users: ${JSON.stringify(players, null, 3)}`);
 
-  callback(world, users);
 }
 
 
@@ -37,14 +37,18 @@ const onNewPlayer = socket => (username, callback) => {
  io.on('connection', (socket) => {
    //set what server does on different events
    
-  socket.on('newplayer', onNewPlayer(socket));
+  socket.on('join', onJoin(socket));
 
-  socket.on('message', (loc, ) => {
-    console.log(`location (server end): ${JSON.stringify(loc)}`);
+  socket.on('loc', (newLoc, ) => {
+    let playerid = socket.id;
+    console.log(`location update (server end): ${JSON.stringify(newLoc)}`);
+    players[playerid].loc = newLoc;
+    socket.broadcast.emit('playermove', playerid, newLoc);
   });
 
   socket.on('disconnect', (reason) => {
-    delete users[socket.id];
+    delete players[socket.id];
+    socket.broadcast.emit(socket.id);
   });
 });
 

@@ -48,18 +48,46 @@ var vec = {
 }
 
 
+var sent = {
+  loc: null,
+
+}
+
+var send = {
+  // sent when you join the game (join):
+  join: async () => {
+    const callback = (serverWorld, serverPlayers, givenLoc) => {
+      world = serverWorld;
+      players = serverPlayers;
+      loc = givenLoc;
+    };
+    const [new_callback, new_promise] = getWaitForExecutionPair(callback);
+    socket.emit('join', username, new_callback);
+    await new_promise;
+  },
+  // default movement message (loc):
+  loc: () => { // sends  loc: {x:, y:},
+    if (!vec.equals(sent.loc, loc)) {
+      // const buf2 = Buffer.from('bytes');
+      socket.emit('loc', loc,);
+      sent.loc = { ...loc };
+    }
+  },
+}
 
 
-//not including yourself
-var users = {
-  // socket.id0: {
-  //   location: {x:0, y:0, z:0},
-  //   username: user1
-  // }
-};
-var world = {
 
-};
+//both these are initialized by server after player joins
+//players doesn't include yourself
+var players = null;
+var world = null;
+// once initialized, 
+//players = {
+//  socket.id0: {
+//    loc: {x:0, y:0, z:0},
+//    username: user1
+//  }, ...
+//}
 
 //player info
 var username = "user1";
@@ -87,24 +115,6 @@ var keyDirection_isOpposite = (key1, key2) => {
     case "up": return d2 === "down";
     case "down": return d2 === "up";
   }
-}
-
-// list of all keys currently pressed that are orthogonal to key k
-var keysPressed_orthogonalTo = (k) => {
-  let ret = [];
-  switch (keyDirections[k]) {
-    case "left":
-    case "right":
-      if (keysPressed.has(keyBindings["up"])) ret.push(keyBindings["up"]);
-      if (keysPressed.has(keyBindings["down"])) ret.push(keyBindings["down"]);
-      break;
-    case "up":
-    case "down":
-      if (keysPressed.has(keyBindings["left"])) ret.push(keyBindings["left"]);
-      if (keysPressed.has(keyBindings["right"])) ret.push(keyBindings["right"]);
-      break;
-  }
-  return ret;
 }
 
 // if k is null, there is no orthogonal key to a and b being pressed, or there are 2
@@ -144,12 +154,12 @@ var keyVectors = {
   'd': { x: 1, y: 0 }
 }
 
-// contains 'w', 'a', 's', or 'd'
+// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
 var keysPressed = new Set();
 
 
 // player info related to game mechanics
-var loc = { x: 0, y: 0 }; //location
+var loc = null; //location (defined by server initially)
 var vel = { x: 0, y: 0 }; //velocity. Note vel.y is UP, not down (unlike loc)
 
 var playerRadius = 10
@@ -240,67 +250,6 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
-// returns a new function to execute and a promise that resolves when the new function executes
-// returns [new_fn, promise]
-const getWaitForExecutionPair = (callback) => {
-  let r;
-  //promise only resolves after new_fn is called, which runs callback(...args) 
-  const promise = new Promise((res, rej) => { r = res; });
-  let new_fn = (...args) => {
-    callback(...args);
-    r();
-  }
-  return [new_fn, promise];
-};
-
-
-
-var sent = {
-  loc: null,
-
-}
-
-
-const send = {
-  // sent when you join the game (newplayer):
-  newPlayer: async (callback) => {
-    const [new_callback, new_promise] = getWaitForExecutionPair(callback);
-    socket.emit('newplayer', username, new_callback);
-
-    await new_promise;
-  },
-  // default movement message (message):
-  loc: () => { // sends  loc: {x:, y:},
-    if (!vec.equals(sent.loc, loc)) {
-      const msg = { loc: loc };
-      // const buf2 = Buffer.from('bytes');
-      socket.emit('message', loc,);
-      sent.loc = { ...loc };
-    }
-  },
-
-}
-
-
-
-
-
-
-const clientRunGame = async () => {
-  // 1. tell server I'm a new player
-  const callback = (serverWorld, serverUsers) => {
-    world = serverWorld;
-    users = serverUsers;
-  };
-
-  await send.newPlayer(callback);
-  // once get here, know the callback was run  
-
-  // 2. start game
-  window.requestAnimationFrame(drawAndSend);
-}
-
-
 
 
 
@@ -317,7 +266,7 @@ var prevtime;
 var starttime;
 var currtime;
 
-let drawAndSend = (timestamp) => {
+let runGame = (timestamp) => {
   if (starttime === undefined) {
     starttime = timestamp;
     prevtime = timestamp;
@@ -349,9 +298,9 @@ let drawAndSend = (timestamp) => {
 
   // if update position, send info to server
   send.loc();
-  // console.log("world, users", world, users);
+  // console.log("world, players", world, players);
 
-  window.requestAnimationFrame(drawAndSend);
+  window.requestAnimationFrame(runGame);
 }
 
 
@@ -435,7 +384,75 @@ document.addEventListener('keyup', function (event) {
 
 
 
-socket.on('connect', clientRunGame);
+// returns a new function to execute and a promise that resolves when the new function executes
+// returns [new_fn, promise]
+const getWaitForExecutionPair = (callback) => {
+  let r;
+  const promise = new Promise((res, rej) => { r = res; });
+  let new_fn = (...args) => {
+    callback(...args);
+    r();
+  }
+  return [new_fn, promise];
+};
+
+
+
+
+
+
+/**
+Socket events sent:
+  join (username, callback(world,players,givenLoc)):
+  - server: calls callback, emits newplayer to all others
+  - note that client must wait for callback since it initializes world, players, and loc 
+  loc (loc):
+  - server: updates player's loc, emits loc to all others
+
+Socket events received:
+  connect(whenConnect):
+  - client: sends join to server, and waits for callback, then runs game
+  playerjoin(playerid, username, loc):
+  - client: adds player to players
+  playermove(playerid, loc):
+  - client: sets playerid's loc to loc
+  playerdisconnect(playersocketid):
+  - client: removes playersocketid from players
+*/
+
+
+
+const whenConnect = async () => {
+  // 1. tell server I'm a new player
+  await send.join();
+  // once get here, know that world, players, and loc are defined  
+  // 2. start game
+  window.requestAnimationFrame(runGame);
+}
+socket.on('connect', whenConnect);
+
+
+
+const playerJoin = (playerid, usern, loc) => {
+  players[playerid] = {};
+  players[playerid].loc = loc;
+  players[playerid].username = usern;
+}
+socket.on('playerjoin', playerJoin);
+
+
+const playerMove = (playerid, newLoc) => {
+  players[playerid].loc = newLoc;
+}
+socket.on('playermove', playerMove);
+
+
+
+const playerDisconnect = (playerid) => {
+  players.delete(playerid);
+}
+socket.on('playerdisconnect', playerDisconnect);
+
 
 socket.on('connect_error', (error) => {
   console.log("Connection error: " + JSON.stringify(error));
