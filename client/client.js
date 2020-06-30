@@ -47,10 +47,8 @@ var vec = {
   }
 }
 
-
-const playerid = socket.id;
-
 //both these are initialized by server after player joins
+var localPlayer = null;
 var world = null;
 var players = null;
 //players includes yourself
@@ -59,12 +57,12 @@ var players = null;
 // once initialized, 
 //players = {
 //  otherplayer.socket.id: {
-//    loc: {x:0, y:0},
-//    vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike loc)
-//    username: user1,
-//    hooks:
-//  }, 
-//  playerid: ...,
+  //  loc: {x:0, y:0},
+  //  vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike how it's drawn)
+  //  username: user1,
+  //  hooks: {hook: loc: hookloc, hookReceived: player}
+  //  isHooked: false // make your base walkspeed slower if true
+  //  }, 
 //}
 
 
@@ -169,7 +167,7 @@ var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
-  vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
+  localPlayer.vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
 }
 
 // --- BOOSTING ---
@@ -254,7 +252,7 @@ var boost_updateOnRelease = (keyReleased) => {
 var drawPlayer = (color, loc, username) => {
   c.beginPath();
   c.strokeStyle = color;
-  c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
+  c.arc(loc.x, -loc.y, playerRadius, 0, 2 * Math.PI);
   c.stroke();
 
   // c.font = "10px Verdana";
@@ -295,10 +293,9 @@ let runGame = (timestamp) => {
 
   // update velocity from key presses
   velocity_update(currtime);
-
   // update location
-  loc.x += vel.x * dt;
-  loc.y += -vel.y * dt;
+  localPlayer.loc.x += vel.x * dt;
+  localPlayer.loc.y += vel.y * dt;
   // console.log("loc: ", loc);
 
   //render
