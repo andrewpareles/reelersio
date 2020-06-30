@@ -69,6 +69,20 @@ var players = null;
 
 
 
+
+// returns a new function to execute and a promise that resolves when the new function executes
+// returns [new_fn, promise]
+const getWaitForExecutionPair = (callback) => {
+  let r;
+  const promise = new Promise((res, rej) => { r = res; });
+  let new_fn = (...args) => {
+    callback(...args);
+    r();
+  }
+  return [new_fn, promise];
+};
+
+
 var sent = {
   loc: null,
 
@@ -77,9 +91,10 @@ var sent = {
 var send = {
   // sent when you join the game (join):
   join: async () => {
-    const callback = (serverWorld, serverPlayers) => {
-      world = serverWorld;
+    const callback = (playerobj, serverWorld, serverPlayers) => {
+      localPlayer = playerobj;
       players = serverPlayers;
+      world = serverWorld;
     };
     const [new_callback, new_promise] = getWaitForExecutionPair(callback);
     socket.emit('join', username, new_callback);
@@ -88,7 +103,7 @@ var send = {
   // sent to update your location to the server (loc):
   loc: () => { // sends  loc: {x:, y:},
     // const buf2 = Buffer.from('bytes');
-    socket.emit('loc', loc,);
+    socket.emit('loc', loc);
   },
 }
 
@@ -163,9 +178,7 @@ var keyVectors = {
 
 
 var playerRadius = 10
-
 var walkspeed = 124 / 1000 // pix/ms
-
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 let velocity_update = () => {
@@ -412,36 +425,18 @@ document.addEventListener('keyup', function (event) {
 
 
 
-// returns a new function to execute and a promise that resolves when the new function executes
-// returns [new_fn, promise]
-const getWaitForExecutionPair = (callback) => {
-  let r;
-  const promise = new Promise((res, rej) => { r = res; });
-  let new_fn = (...args) => {
-    callback(...args);
-    r();
-  }
-  return [new_fn, promise];
-};
-
-
-
-
-
 
 /**
 Socket events sent:
   join (username):
   - server: calls callback, emits newplayer to all others, emits 'initplayer' to player
-  - note that client must wait for callback since it initializes world, players, and loc 
+  - note that client must wait for callback since it initializes world, players, and localPlayer 
   loc (loc):
   - server: updates player's loc, emits loc to all others
 
 Socket events received:
   connect(whenConnect):
-  - client: sends join to server, and waits for 'init' event
-  init(players, world)
-  - client: updates players (including this user), and world
+  - client: sends join to server, and waits for callback to be run
   playerjoin(playerid, username, loc):
   - client: adds player to players
   playermove(playerid, loc):
@@ -453,11 +448,12 @@ Socket events received:
 
 
 const whenConnect = async () => {
-  console.log("me", socket.id);
+  console.log("initializing localPlayer");
   // 1. tell server I'm a new player
   await send.join();
+  console.log("localPlayer", localPlayer);
   console.log("players", players);
-
+  console.log("world", world);
   // once get here, know that world, players, and loc are defined  
   // 2. start game
   window.requestAnimationFrame(runGame);
@@ -466,12 +462,13 @@ socket.on('connect', whenConnect);
 
 
 
-const playerJoin = (playerid, usern, loc) => {
-  console.log("player joining", playerid, usern, loc);
-  players[playerid] = { loc: loc, username: usern };
+const playerJoin = (playerid, playerobj) => {
+  console.log("player joining", playerid, playerobj);
+  players[playerid] = playerobj;
   console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
+
 
 
 const playerMove = (playerid, newLoc) => {
@@ -481,12 +478,14 @@ const playerMove = (playerid, newLoc) => {
 socket.on('playermove', playerMove);
 
 
+
 const playerDisconnect = (playerid) => {
   console.log("player left", playerid);
   delete players[playerid];
   console.log("players", players);
 }
 socket.on('playerdisconnect', playerDisconnect);
+
 
 
 socket.on('connect_error', (error) => {
