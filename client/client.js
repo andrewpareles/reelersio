@@ -43,7 +43,7 @@ var vec = {
   },
 
   negative: (a) => {
-    return { x: -a.x, y: -a.y };
+    return scalar(a, -1);
   }
 }
 
@@ -51,18 +51,21 @@ var vec = {
 var localPlayer = null;
 var world = null;
 var players = null;
-//players includes yourself
-// 1. send 'join' event to server, server gives you players
+//players does not include yourself
+// 1. send 'join' event to server, server gives you players, world, localPlayer
 // 2. on player join, add that new player to players
 // once initialized, 
 //players = {
 //  otherplayer.socket.id: {
-  //  loc: {x:0, y:0},
-  //  vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike how it's drawn)
-  //  username: user1,
-  //  hooks: {hook: loc: hookloc, hookReceived: player}
-  //  isHooked: false // make your base walkspeed slower if true
+//  loc: {x:0, y:0},
+//  vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike how it's drawn)
+//  username: user1,
+//  hooks: {hook: loc: hookloc, hookReceived: player}
+//  isHooked: false // make your base walkspeed slower if true
+//  timeAtUpdate: //
+//  }, 
   //  }, 
+//  }, 
 //}
 
 
@@ -82,21 +85,21 @@ const getWaitForExecutionPair = (callback) => {
 
 
 var sent = {
-  loc: null,
+  vel: null,
 
 }
 
 var send = {
-  // sent when you join the game (join):
+  // sent when you join the game:
   join: async (callback) => {
     const [new_callback, new_promise] = getWaitForExecutionPair(callback);
     socket.emit('join', 'user1', new_callback);
     await new_promise;
   },
-  // sent to update your location to the server (loc):
-  loc: () => { // sends  loc: {x:, y:},
+  // sent to update your location to the server:
+  updateloc: () => { // sends loc & vel
     // const buf2 = Buffer.from('bytes');
-    socket.emit('loc', localPlayer.loc);
+    socket.emit('updateloc', localPlayer.loc, localPlayer.vel);
   },
 }
 
@@ -173,10 +176,6 @@ var keyVectors = {
 var playerRadius = 20
 var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
-
-let velocity_update = () => {
-  localPlayer.vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
-}
 
 // --- BOOSTING ---
 // Record the previous 2 keys pressed
@@ -257,11 +256,11 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
-var drawPlayer = (color, loc, isLocalPlayer) => {
+var drawPlayer = (color, loc) => {
   c.beginPath();
   c.lineWidth = 6;//isLocalPlayer ? 4 : 2;
   c.strokeStyle = color;
-  c.arc(loc.x, -loc.y, playerRadius - c.lineWidth/2, 0, 2 * Math.PI);
+  c.arc(loc.x, -loc.y, playerRadius - c.lineWidth / 2, 0, 2 * Math.PI);
   c.stroke();
 
   // c.font = "10px Verdana";
@@ -285,7 +284,7 @@ var prevtime;
 var starttime;
 var currtime;
 
-let runGame = (timestamp) => {
+let newFrame = (timestamp) => {
   if (starttime === undefined) {
     starttime = timestamp;
     prevtime = timestamp;
@@ -299,34 +298,36 @@ let runGame = (timestamp) => {
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
 
-
   // update velocity from key presses
-  velocity_update(currtime);
+  localPlayer.vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
   // update location
-  localPlayer.loc.x += localPlayer.vel.x * dt;
-  localPlayer.loc.y += localPlayer.vel.y * dt;
+  localPlayer.loc = vec.add(localPlayer.loc, vec.scalar(localPlayer.vel, dt));
   // console.log("loc: ", loc);
+
+
+
 
   //render
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
   //draw others
   for (let p in players) {
+    //update other players by interpolating velocity
+    players[p].loc = vec.add(players[p].loc, vec.scalar(players[p].vel, dt));
+    // console.log("players[p].loc:", players[p].loc);
     drawPlayer(players[p].color, players[p].loc);
   }
-
   // draw me
   drawPlayer(localPlayer.color, localPlayer.loc, true);
 
-  // if update position, send info to server
-  if (!vec.equals(sent.loc, localPlayer.loc)) {
-    console.log("sending loc");
-    send.loc();
-    sent.loc = { ...localPlayer.loc };
+  // if update velocity, send info to server
+  if (!vec.equals(sent.vel, localPlayer.vel)) {
+    console.log("sending loc/vel");
+    send.updateloc();
+    sent.vel = { ...localPlayer.vel };
   }
-  // console.log("world, players", world, players);
 
-  window.requestAnimationFrame(runGame);
+  window.requestAnimationFrame(newFrame);
 }
 
 
@@ -418,21 +419,21 @@ document.addEventListener('keyup', function (event) {
 
 
 
-
+// TODO: test out moveTime in playermove and updateloc
 /**
 Socket events sent:
-  join (username):
-  - server: calls callback, emits newplayer to all others, emits 'initplayer' to player
+  join (username, callback):
+  - server: calls callback, emits newplayer to all others
   - note that client must wait for callback since it initializes world, players, and localPlayer 
-  loc (loc):
-  - server: updates player's loc, emits loc to all others
+  updateloc (loc, vel):
+  - server: updates player's loc & vel , emits loc & vel to all others
 
 Socket events received:
   connect(whenConnect):
   - client: sends join to server, and waits for callback to be run
   playerjoin(playerid, username, loc):
   - client: adds player to players
-  playermove(playerid, loc):
+  playermove(playerid, loc, vel):
   - client: sets playerid's loc to loc
   playerdisconnect(playersocketid):
   - client: removes playersocketid from players
@@ -454,7 +455,7 @@ const whenConnect = async () => {
   console.log("world", world);
   // once get here, know that world, players, and loc are defined  
   // 2. start game
-  window.requestAnimationFrame(runGame);
+  window.requestAnimationFrame(newFrame);
 }
 socket.on('connect', whenConnect);
 
@@ -469,9 +470,10 @@ socket.on('playerjoin', playerJoin);
 
 
 
-const playerMove = (playerid, newLoc) => {
-  // console.log("player moved", playerid, newLoc);
+const playerMove = (playerid, newLoc, newVel) => {
+  console.log("player moved", playerid, newLoc, newVel);
   players[playerid].loc = newLoc;
+  players[playerid].vel = newVel;
 }
 socket.on('playermove', playerMove);
 
