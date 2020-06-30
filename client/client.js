@@ -88,20 +88,15 @@ var sent = {
 
 var send = {
   // sent when you join the game (join):
-  join: async () => {
-    const callback = (playerobj, serverWorld, serverPlayers) => {
-      localPlayer = playerobj;
-      players = serverPlayers;
-      world = serverWorld;
-    };
+  join: async (callback) => {
     const [new_callback, new_promise] = getWaitForExecutionPair(callback);
-    socket.emit('join', username, new_callback);
+    socket.emit('join', 'user1', new_callback);
     await new_promise;
   },
   // sent to update your location to the server (loc):
   loc: () => { // sends  loc: {x:, y:},
     // const buf2 = Buffer.from('bytes');
-    socket.emit('loc', loc);
+    socket.emit('loc', localPlayer.loc);
   },
 }
 
@@ -175,7 +170,7 @@ var keyVectors = {
 
 
 
-var playerRadius = 10
+var playerRadius = 20
 var walkspeed = 124 / 1000 // pix/ms
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
@@ -262,10 +257,11 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
-var drawPlayer = (color, loc, username) => {
+var drawPlayer = (color, loc, isLocalPlayer) => {
   c.beginPath();
+  c.lineWidth = 6;//isLocalPlayer ? 4 : 2;
   c.strokeStyle = color;
-  c.arc(loc.x, -loc.y, playerRadius, 0, 2 * Math.PI);
+  c.arc(loc.x, -loc.y, playerRadius - c.lineWidth/2, 0, 2 * Math.PI);
   c.stroke();
 
   // c.font = "10px Verdana";
@@ -307,26 +303,26 @@ let runGame = (timestamp) => {
   // update velocity from key presses
   velocity_update(currtime);
   // update location
-  localPlayer.loc.x += vel.x * dt;
-  localPlayer.loc.y += vel.y * dt;
+  localPlayer.loc.x += localPlayer.vel.x * dt;
+  localPlayer.loc.y += localPlayer.vel.y * dt;
   // console.log("loc: ", loc);
 
   //render
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
-  // draw me
-  drawPlayer("black", loc, username);
-
   //draw others
   for (let p in players) {
-    drawPlayer("#FF0000", players[p].loc, players[p].username);
+    drawPlayer(players[p].color, players[p].loc);
   }
 
+  // draw me
+  drawPlayer(localPlayer.color, localPlayer.loc, true);
+
   // if update position, send info to server
-  if (!vec.equals(sent.loc, loc)) {
+  if (!vec.equals(sent.loc, localPlayer.loc)) {
     console.log("sending loc");
     send.loc();
-    sent.loc = { ...loc };
+    sent.loc = { ...localPlayer.loc };
   }
   // console.log("world, players", world, players);
 
@@ -447,7 +443,12 @@ Socket events received:
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  await send.join();
+  const joinCallback = (playerobj, serverPlayers, serverWorld) => {
+    localPlayer = playerobj;
+    players = serverPlayers;
+    world = serverWorld;
+  };
+  await send.join(joinCallback);
   console.log("localPlayer", localPlayer);
   console.log("players", players);
   console.log("world", world);

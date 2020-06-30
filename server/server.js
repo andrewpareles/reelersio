@@ -15,18 +15,22 @@ var world = {
 
 
 const generateStartingLocation = () => {
-  return { x: 10, y: 10 };
+  return { x: 20, y: -100 };
+}
+
+const generateRandomColor = () => {
+  return '#'+Math.floor(Math.random()*16777215).toString(16);
 }
 
 //callback(player, world, users)
 const onJoin = socket => (username, callback) => {
-  let loc = generateStartingLocation();
   let newPlayer = {
-    loc: loc,
+    loc: generateStartingLocation(),
     vel: { x: 0, y: 0 },
     username: username,
-    hooks: new Set(), //{loc: {x:, y:}, vel: {x:, y:}, hookedPlayer:"picklebob"}
-    hookedBy: new Set(), //players you're hooked by
+    color: generateRandomColor(),
+    // hooks: new Set(), //{loc: {x:, y:}, vel: {x:, y:}, hookedPlayer:"picklebob"}
+    // hookedBy: new Set(), //players you're hooked by
   };
 
   //to sender: (players doesn't include newPlayer)
