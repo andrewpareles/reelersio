@@ -48,6 +48,27 @@ var vec = {
 }
 
 
+const playerid = socket.id;
+
+//both these are initialized by server after player joins
+var world = null;
+var players = null;
+//players includes yourself
+// 1. send 'join' event to server, server gives you players
+// 2. on player join, add that new player to players
+// once initialized, 
+//players = {
+//  otherplayer.socket.id: {
+//    loc: {x:0, y:0},
+//    vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike loc)
+//    username: user1,
+//    hooks:
+//  }, 
+//  playerid: ...,
+//}
+
+
+
 var sent = {
   loc: null,
 
@@ -56,10 +77,9 @@ var sent = {
 var send = {
   // sent when you join the game (join):
   join: async () => {
-    const callback = (serverWorld, serverPlayers, givenLoc) => {
+    const callback = (serverWorld, serverPlayers) => {
       world = serverWorld;
       players = serverPlayers;
-      loc = givenLoc;
     };
     const [new_callback, new_promise] = getWaitForExecutionPair(callback);
     socket.emit('join', username, new_callback);
@@ -74,20 +94,6 @@ var send = {
 
 
 
-//both these are initialized by server after player joins
-//players doesn't include yourself
-var players = null;
-var world = null;
-// once initialized, 
-//players = {
-//  socket.id0: {
-//    loc: {x:0, y:0},
-//    username: user1
-//  }, ...
-//}
-
-//player info
-var username = "user1";
 
 var keyBindings = {
   up: 'w',
@@ -155,10 +161,6 @@ var keyVectors = {
 }
 
 
-
-// player info related to game mechanics
-var loc = null; //location (defined by server initially)
-var vel = { x: 0, y: 0 }; //velocity. Note vel.y is UP, not down (unlike loc)
 
 var playerRadius = 10
 
@@ -429,15 +431,17 @@ const getWaitForExecutionPair = (callback) => {
 
 /**
 Socket events sent:
-  join (username, callback(world,players,givenLoc)):
-  - server: calls callback, emits newplayer to all others
+  join (username):
+  - server: calls callback, emits newplayer to all others, emits 'initplayer' to player
   - note that client must wait for callback since it initializes world, players, and loc 
   loc (loc):
   - server: updates player's loc, emits loc to all others
 
 Socket events received:
   connect(whenConnect):
-  - client: sends join to server, and waits for callback, then runs game
+  - client: sends join to server, and waits for 'init' event
+  init(players, world)
+  - client: updates players (including this user), and world
   playerjoin(playerid, username, loc):
   - client: adds player to players
   playermove(playerid, loc):
@@ -475,7 +479,6 @@ const playerMove = (playerid, newLoc) => {
   players[playerid].loc = newLoc;
 }
 socket.on('playermove', playerMove);
-
 
 
 const playerDisconnect = (playerid) => {

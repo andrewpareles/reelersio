@@ -4,7 +4,9 @@ var io = require('socket.io')(server);
 
 var players = {
   // socket.id0: {
-  //   location: {x:0, y:0},
+  //   loc: {x:0, y:0},
+  //   username: name,
+  //
   // }
 };
 var world = {
@@ -16,10 +18,9 @@ const generateRandomLocation = () => {
   return { x: 10, y: 10 };
 }
 
-//callback(world, users, startLoc)
-const onJoin = socket => (username, callback) => {
+//callback(world, users)
+const onJoin = socket => (username) => {
   let loc = generateRandomLocation();
-  callback(world, players, loc);
   players[socket.id] = { loc: loc, username: username };
   socket.broadcast.emit('playerjoin', socket.id, username, loc);
   console.log(`connected socket.id: ${socket.id}`);
