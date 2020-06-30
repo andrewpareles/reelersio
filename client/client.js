@@ -36,7 +36,7 @@ var vec = {
   normalized: (a, mag) => {
     if (!mag) {
       if (mag !== 0) mag = 1;
-      else if (mag === 0) return { x: 0, y: 0 };
+      else return { x: 0, y: 0 };
     }
     let norm = vec.norm(a);
     return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
@@ -249,7 +249,19 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
+var drawPlayer = (color, loc, username) => {
+  c.beginPath();
+  c.strokeStyle = color;
+  c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
+  c.stroke();
 
+  // c.font = "10px Verdana";
+  // c.textAlign = "center";
+  // c.textBaseline = "top";
+  // c.fillStyle = color;
+  // c.fillText(username, loc.x, loc.y + playerRadius + 5);
+
+}
 
 var canvas = document.getElementById("canvas");
 var c = canvas.getContext("2d");
@@ -291,17 +303,11 @@ let runGame = (timestamp) => {
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
   // draw me
-  c.beginPath();
-  c.strokeStyle = "black";
-  c.arc(loc.x, loc.y, playerRadius, 0, 2 * Math.PI);
-  c.stroke();
+  drawPlayer("black", loc, username);
 
+  //draw others
   for (let p in players) {
-    let ploc = players[p].loc;
-    c.beginPath();
-    c.strokeStyle = "#FF0000";
-    c.arc(ploc.x, ploc.y, playerRadius, 0, 2 * Math.PI);
-    c.stroke();
+    drawPlayer("#FF0000", players[p].loc, players[p].username);
   }
 
   // if update position, send info to server
@@ -364,24 +370,32 @@ document.addEventListener('keyup', function (event) {
   let movementDirChanged = false;
   switch (key) {
     case keyBindings["up"]:
-      directionPressed.y -= 1;
-      keysPressed.delete(key);
-      movementDirChanged = true;
+      if (keysPressed.has(key)) {
+        directionPressed.y -= 1;
+        keysPressed.delete(key);
+        movementDirChanged = true;
+      }
       break;
     case keyBindings["down"]:
-      directionPressed.y -= -1;
-      keysPressed.delete(key);
-      movementDirChanged = true;
+      if (keysPressed.has(key)) {
+        directionPressed.y -= -1;
+        keysPressed.delete(key);
+        movementDirChanged = true;
+      }
       break;
     case keyBindings["left"]:
-      directionPressed.x -= -1;
-      keysPressed.delete(key);
-      movementDirChanged = true;
+      if (keysPressed.has(key)) {
+        directionPressed.x -= -1;
+        keysPressed.delete(key);
+        movementDirChanged = true;
+      }
       break;
     case keyBindings["right"]:
-      directionPressed.x -= 1;
-      keysPressed.delete(key);
-      movementDirChanged = true;
+      if (keysPressed.has(key)) {
+        directionPressed.x -= 1;
+        keysPressed.delete(key);
+        movementDirChanged = true;
+      }
       break;
   }
 
@@ -450,7 +464,7 @@ socket.on('connect', whenConnect);
 
 const playerJoin = (playerid, usern, loc) => {
   console.log("player joining", playerid, usern, loc);
-  players[playerid] = {loc: loc, username: usern};
+  players[playerid] = { loc: loc, username: usern };
   console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
