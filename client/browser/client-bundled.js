@@ -2221,13 +2221,13 @@ var vec = {
     return { x: a.x + b.x, y: a.y + b.y };
   },
 
-  // a*v, a is scalar, v is vector
-  scalar: (v, a) => {
-    return { x: a * v.x, y: a * v.y };
+  // s*v, a is scalar, v is vector
+  scalar: (v, s) => {
+    return { x: s * v.x, y: s * v.y };
   },
 
   // the magnitude of the vector
-  norm: (a) => {
+  mag: (a) => {
     return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
   },
 
@@ -2248,14 +2248,29 @@ var vec = {
       if (mag !== 0) mag = 1;
       else return { x: 0, y: 0 };
     }
-    let norm = vec.norm(a);
+    let norm = vec.mag(a);
     return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
   },
 
   negative: (a) => {
-    return scalar(a, -1);
+    return vec.scalar(a, -1);
+  },
+
+  dot: (a, b) => {
+    return a.x * b.x + a.y * b.y;
   }
 }
+
+function graphics_darkenColor(col, amt) {
+  col = col.substring(1);
+  var num = parseInt(col, 16);
+  var r = (num >> 16) - amt;
+  var b = ((num >> 8) & 0x00FF) - amt;
+  var g = (num & 0x0000FF) - amt;
+  var newColor = g | (b << 8) | (r << 16);
+  return "#" + newColor.toString(16);
+}
+
 
 //both these are initialized by server after player joins
 var localPlayer = null;
@@ -2270,9 +2285,10 @@ var players = null;
 //  loc: {x:0, y:0},
 //  vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike how it's drawn)
 //  username: user1,
-//  hooks: {hook: loc: hookloc, hookReceived: player}
+//  hooks: {loc: hookloc, vel: hookvel, hookedPlayer: player}
 //  isHooked: false // make your base walkspeed slower if true
-//  timeAtUpdate: //
+//  }, 
+//  }, 
 //  }, 
 //}
 
@@ -2383,6 +2399,10 @@ var keyVectors = {
 
 var playerRadius = 20
 var walkspeed = 124 / 1000 // pix/ms
+
+var hookRadius = 10 //half of the edge length of the square (not diagnoal)
+var hookspeed = 500 / 1000
+
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 // --- BOOSTING ---
@@ -2479,6 +2499,26 @@ var drawPlayer = (color, loc) => {
 
 }
 
+
+var drawHook = (pcolor, ploc, hloc) => {
+  let hcol = graphics_darkenColor(pcolor, 50);
+  // draw the line
+  c.beginPath();
+  c.lineWidth = 1;
+  c.strokeStyle = hcol;
+  c.moveTo(ploc.x, -ploc.y);
+  c.lineTo(hloc.x, -hloc.y);
+  c.stroke();
+
+  // draw the hook
+  c.beginPath();
+  c.strokeStyle = hcol;
+  c.lineWidth = 2;
+  c.rect(hloc.x - hookRadius, -(hloc.y - hookRadius), 2 * hookRadius, -2 * hookRadius);
+  c.stroke();
+}
+
+
 var canvas = document.getElementById("canvas");
 var c = canvas.getContext("2d");
 
@@ -2506,28 +2546,31 @@ let newFrame = (timestamp) => {
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
 
+  //render:
+  c.clearRect(0, 0, WIDTH, HEIGHT);
+
+  //(1) draw & update others
+  for (let p in players) {
+    //update other players by interpolating velocity
+    players[p].loc = vec.add(players[p].loc, vec.scalar(players[p].vel, dt));
+    // console.log("players[p].loc:", players[p].loc);
+    drawPlayer(players[p].color, players[p].loc);
+  }
+
+  //(2) draw & update me:
   // update velocity from key presses
   localPlayer.vel = vec.add(vec.normalized(directionPressed, walkspeed), vec.normalized(boostDir, walkspeed * boostMultiplier));
   // update location
   localPlayer.loc = vec.add(localPlayer.loc, vec.scalar(localPlayer.vel, dt));
   // console.log("loc: ", loc);
-
-
-
-
-  //render
-  c.clearRect(0, 0, WIDTH, HEIGHT);
-
-  //draw others
-  for (let p in players) {
-    //update other players by interpolating velocity
-    console.log("loc, vel:", players[p].loc, players[p].vel);
-    players[p].loc = vec.add(players[p].loc, vec.scalar(players[p].vel, dt));
-    // console.log("players[p].loc:", players[p].loc);
-    drawPlayer(players[p].color, players[p].loc);
-  }
-  // draw me
   drawPlayer(localPlayer.color, localPlayer.loc, true);
+
+
+  // draw & update hooks
+  for (let h of localPlayer.hooks) {
+    h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+    drawHook(localPlayer.color, localPlayer.loc, h.loc);
+  }
 
   // if update velocity, send info to server
   if (!vec.equals(sent.vel, localPlayer.vel)) {
@@ -2617,13 +2660,28 @@ document.addEventListener('keyup', function (event) {
       break;
   }
 
-
   if (movementDirChanged) {
     boost_updateOnRelease(key);
   }
 });
 
 
+const canv_top = canvas.getBoundingClientRect().top;
+const canv_left = canvas.getBoundingClientRect().left;
+
+document.addEventListener('mousedown', function (event) {
+  let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
+
+  let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points to mouse from player
+  let playerVel_projectedOn_hookDir = vec.dot(localPlayer.vel, hookDir);
+  let hook = {
+    vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
+    loc: vec.add(localPlayer.loc, vec.normalized(hookDir, playerRadius)),
+    playerHooked: null,
+  };
+  console.log('projvel', vec.mag(hook.vel));
+  localPlayer.hooks.push(hook);
+});
 
 
 
@@ -2673,6 +2731,7 @@ socket.on('connect', whenConnect);
 const playerJoin = (playerid, playerobj) => {
   console.log("player joining", playerid, playerobj);
   players[playerid] = playerobj;
+  console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
 

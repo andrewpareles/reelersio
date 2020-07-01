@@ -15,7 +15,7 @@ var world = {
 
 
 const generateStartingLocation = () => {
-  return { x: Math.random()*20, y: Math.random()*-100 };
+  return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
 }
 
 const generateRandomColor = () => {
@@ -34,7 +34,7 @@ io.on('connection', (socket) => {
       vel: { x: 0, y: 0 },
       username: username,
       color: generateRandomColor(),
-      // hooks: new Set(), //{loc: {x:, y:}, vel: {x:, y:}, hookedPlayer:"picklebob"}
+      hooks: [], //{loc: {x:, y:}, vel: {x:, y:}, hookedPlayer:"picklebob"}
       // hookedBy: new Set(), //players you're hooked by
     };
     //to sender: (players doesn't include newPlayer)
@@ -43,9 +43,9 @@ io.on('connection', (socket) => {
     players[socket.id] = newPlayer;
 
     //to all but sender: (players includes newPlayer)
-    console.log("player[socket.id]:", players[socket.id]);
     socket.broadcast.emit('playerjoin', socket.id, players[socket.id]);
 
+    console.log("players:", players);
     // console.log(`connected socket.id: ${socket.id}`);
     // console.log(`players: ${JSON.stringify(players, null, 3)}`);
   });

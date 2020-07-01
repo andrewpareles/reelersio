@@ -5,7 +5,7 @@
   "main": "client.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "compile": "browserify client.js -o browser/client-bundled.js && cp game.html browser/game.html && cp clientcss.css browser/clientcss.css"
+    "compile": "browserify client.js -o browser/client-bundled.js && cp game.html browser/game.html && cp clientcss.css browser/clientcss-bundled.css"
     },
   "author": "",
   "license": "ISC",
