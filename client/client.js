@@ -51,14 +51,23 @@ var vec = {
   }
 }
 
-function graphics_darkenColor(col, amt) {
-  col = col.substring(1);
+function graphics_brightenColor(col, amt) {
+  var usePound = false;
+  if (col[0] == "#") {
+    col = col.slice(1);
+    usePound = true;
+  }
   var num = parseInt(col, 16);
-  var r = (num >> 16) - amt;
-  var b = ((num >> 8) & 0x00FF) - amt;
-  var g = (num & 0x0000FF) - amt;
-  var newColor = g | (b << 8) | (r << 16);
-  return "#" + newColor.toString(16);
+  var r = (num >> 16) + amt;
+  if (r > 255) r = 255;
+  else if (r < 0) r = 0;
+  var b = ((num >> 8) & 0x00FF) + amt;
+  if (b > 255) b = 255;
+  else if (b < 0) b = 0;
+  var g = (num & 0x0000FF) + amt;
+  if (g > 255) g = 255;
+  else if (g < 0) g = 0;
+  return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
 }
 
 
@@ -190,8 +199,9 @@ var keyVectors = {
 var playerRadius = 20
 var walkspeed = 124 / 1000 // pix/ms
 
-var hookRadius = 10 //half of the edge length of the square (not diagnoal)
-var hookspeed = 500 / 1000
+var hookRadius_outer = 10 //circle radius
+var hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)) //square radius (half the non-diagonal width)
+var hookspeed = 200 / 1000
 
 var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
@@ -291,20 +301,29 @@ var drawPlayer = (color, loc) => {
 
 
 var drawHook = (pcolor, ploc, hloc) => {
-  let hcol = graphics_darkenColor(pcolor, 50);
+  let outer_lw = 2;
+  let inner_lw = 2;
   // draw the line
   c.beginPath();
   c.lineWidth = 1;
-  c.strokeStyle = hcol;
+  c.strokeStyle = graphics_brightenColor(pcolor, 30);
   c.moveTo(ploc.x, -ploc.y);
   c.lineTo(hloc.x, -hloc.y);
   c.stroke();
 
   // draw the hook
+  // inside bobber (square)
   c.beginPath();
-  c.strokeStyle = hcol;
-  c.lineWidth = 2;
-  c.rect(hloc.x - hookRadius, -(hloc.y - hookRadius), 2 * hookRadius, -2 * hookRadius);
+  c.strokeStyle = graphics_brightenColor(pcolor, -20);
+  c.lineWidth = inner_lw;
+  c.rect(hloc.x - hookRadius_inner + inner_lw / 2, -(hloc.y - hookRadius_inner + inner_lw / 2), 2 * hookRadius_inner - inner_lw, -(2 * hookRadius_inner - inner_lw));
+  c.stroke();
+
+  // outside container (circle)
+  c.beginPath();
+  c.lineWidth = outer_lw;
+  c.strokeStyle = graphics_brightenColor(pcolor, -50);
+  c.arc(hloc.x, -hloc.y, hookRadius_outer + outer_lw / 2, 0, 2 * Math.PI);
   c.stroke();
 }
 
@@ -460,20 +479,24 @@ const canv_top = canvas.getBoundingClientRect().top;
 const canv_left = canvas.getBoundingClientRect().left;
 
 document.addEventListener('mousedown', function (event) {
-  let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-
-  let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points to mouse from player
-  let playerVel_projectedOn_hookDir = vec.dot(localPlayer.vel, hookDir);
-  let hook = {
-    vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
-    loc: vec.add(localPlayer.loc, vec.normalized(hookDir, playerRadius)),
-    playerHooked: null,
-  };
-  console.log('projvel', vec.mag(hook.vel));
-  localPlayer.hooks.push(hook);
+  switch (event.button) {
+    //left click:
+    case 0:
+      let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
+      let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points to mouse from player
+      let playerVel_projectedOn_hookDir = vec.dot(localPlayer.vel, hookDir);
+      let hook = {
+        vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
+        loc: vec.add(localPlayer.loc, vec.normalized(hookDir, playerRadius)),
+      };
+      localPlayer.hooks.push(hook);
+      // console.log('projvel', vec.mag(hook.vel));
+      break;
+  }
 });
 
 
+document.addEventListener('contextmenu', event => event.preventDefault());
 
 
 // TODO: test out moveTime in playermove and updateloc
