@@ -244,7 +244,7 @@ var boost_updateOnPress = () => {
   // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
   if (keyDirection_isOpposite(a, b)) {
     c = keysPressed_singleOrthogonalTo(b);
-    inc = .5;
+    inc = .3;
   }
   // (2) continue boost into new direction
   // one key in new dir, key you just pressed is opposite of current boost dir
