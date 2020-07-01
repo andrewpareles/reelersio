@@ -12,7 +12,7 @@ var players = {
 var world = {
 
 };
-
+// var hooks = [{loc, vel, from, to}]
 
 const generateStartingLocation = () => {
   return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
