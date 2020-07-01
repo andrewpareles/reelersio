@@ -2428,7 +2428,9 @@ var boostMultiplier = 0, // fraction of walkspeed to add to velocity
   boostKey = null; // key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
 
 var boostReset = () => {
-  recentKeys = [];
+  boostMultiplier = 0;
+  boostDir = null;
+  boostKey = null;
 }
 // creates a boost in direction of key k, with boostMultipler increased by inc
 var boostAdd = (k, inc) => {
@@ -2559,10 +2561,6 @@ let newFrame = (timestamp) => {
   // calculate fps
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
-
-  //boost decay
-  boostMultiplier -= (Math.pow(boostMultiplier, 2) / 100 + 1 / 50);
-  if (boostMultiplier < 0) boostMultiplier = 0;
 
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
