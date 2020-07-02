@@ -2214,6 +2214,7 @@ const io = require('socket.io-client');
 const ADDRESS = 'http://localhost:3001';
 const socket = io(ADDRESS);
 
+// --- VECTOR FUNCTIONS ---
 //vector functions on {x: , y:}:
 var vec = {
   // add vector a and b
@@ -2261,27 +2262,8 @@ var vec = {
   }
 }
 
-function graphics_brightenColor(col, amt) {
-  var usePound = false;
-  if (col[0] == "#") {
-    col = col.slice(1);
-    usePound = true;
-  }
-  var num = parseInt(col, 16);
-  var r = (num >> 16) + amt;
-  if (r > 255) r = 255;
-  else if (r < 0) r = 0;
-  var b = ((num >> 8) & 0x00FF) + amt;
-  if (b > 255) b = 255;
-  else if (b < 0) b = 0;
-  var g = (num & 0x0000FF) + amt;
-  if (g > 255) g = 255;
-  else if (g < 0) g = 0;
-  return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
-}
 
-
-//both these are initialized by server after player joins
+// --- GAME CONSTANTS --- : these are initialized by server after player joins
 var localPlayer = null;
 var world = null;
 var players = null;
@@ -2300,10 +2282,13 @@ var players = null;
 //  }, 
 //  }, 
 //}
+var playerRadius = null;
+var walkspeed = null; // pix/ms
+var hookRadius = null; //circle radius
+var hookspeed = null;
 
 
-
-
+// --- SENDING TO SERVER --- (receiving is at very bottom) 
 // returns a new function to execute and a promise that resolves when the new function executes
 // returns [new_fn, promise]
 const getWaitForExecutionPair = (callback) => {
@@ -2338,7 +2323,7 @@ var send = {
 
 
 
-
+// --- KEYBOARD --- 
 var keyBindings = {
   up: 'w',
   down: 's',
@@ -2353,9 +2338,6 @@ var keyDirections = {
   'd': "right"
 }
 
-// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
-var keysPressed = new Set();
-
 //returns true iff key 1 is parallel and in the opposite direction to key 2 
 var keyDirection_isOpposite = (key1, key2) => {
   let [d1, d2] = [keyDirections[key1], keyDirections[key2]];
@@ -2366,6 +2348,17 @@ var keyDirection_isOpposite = (key1, key2) => {
     case "down": return d2 === "up";
   }
 }
+
+// assumes these are normalized
+var keyVectors = {
+  'w': { x: 0, y: 1 },
+  's': { x: 0, y: -1 }, //must = -up
+  'a': { x: -1, y: 0 }, //must = -right
+  'd': { x: 1, y: 0 }
+}
+
+// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
+var keysPressed = new Set();
 
 // if k is null, there is no orthogonal key to a and b being pressed, or there are 2
 // if k is not, it's the single key pressed that's orthogonal to key k
@@ -2396,24 +2389,11 @@ var keysPressed_singleOrthogonalTo = (k) => {
   return ret;
 }
 
-// assumes these are normalized
-var keyVectors = {
-  'w': { x: 0, y: 1 },
-  's': { x: 0, y: -1 }, //must = -up
-  'a': { x: -1, y: 0 }, //must = -right
-  'd': { x: 1, y: 0 }
-}
+var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
 
 
+var boostKey = null; // key that needs to be held down for current boost to be active
 
-var playerRadius = 20
-var walkspeed = 124 / 1000 // pix/ms
-
-var hookRadius_outer = 10 //circle radius
-var hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)) //square radius (half the non-diagonal width)
-var hookspeed = 200 / 1000
-
-var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED
 
 // --- BOOSTING ---
 // Record the previous 2 keys pressed
@@ -2423,17 +2403,14 @@ var recentKeys_insert = (key) => {
   recentKeys[1] = key;
 }
 
-var boostMultiplier = 0, // fraction of walkspeed to add to velocity
-  boostDir = null, // direction of the boost **this is null iff there is no boost**
-  boostKey = null; // key that needs to be held down for current boost to be active, i.e. key not part of the cycle (if any)
+var boostMultiplier = 0; // fraction of walkspeed to add to velocity
+var boostDir = null; // direction of the boost **this is null iff there is no boost**
 
 var boostReset = () => {
-  boostMultiplier = 0;
-  boostDir = null;
-  boostKey = null;
+  recentKeys = [];
 }
 // creates a boost in direction of key k, with boostMultipler increased by inc
-var boostAdd = (k, inc) => {
+var boostSet = (k, inc) => {
   boostDir = keyVectors[k];
   boostKey = k;
   boostMultiplier += inc || 0;
@@ -2469,7 +2446,7 @@ var boost_updateOnPress = () => {
   if (c) {
     // console.log("boost " + (inc ? "continue" : "start"), keyDirections[c]);
     // console.log("key:", c);
-    boostAdd(c, inc);
+    boostSet(c, inc);
   }
   //else, reset boost
   else {
@@ -2490,6 +2467,25 @@ var boost_updateOnRelease = (keyReleased) => {
 
 
 
+// --- DRAWING / GRAPHICS ---
+function graphics_brightenColor(col, amt) {
+  var usePound = false;
+  if (col[0] == "#") {
+    col = col.slice(1);
+    usePound = true;
+  }
+  var num = parseInt(col, 16);
+  var r = (num >> 16) + amt;
+  if (r > 255) r = 255;
+  else if (r < 0) r = 0;
+  var b = ((num >> 8) & 0x00FF) + amt;
+  if (b > 255) b = 255;
+  else if (b < 0) b = 0;
+  var g = (num & 0x0000FF) + amt;
+  if (g > 255) g = 255;
+  else if (g < 0) g = 0;
+  return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
+}
 
 
 var drawPlayer = (color, loc) => {
@@ -2507,10 +2503,10 @@ var drawPlayer = (color, loc) => {
 
 }
 
-
 var drawHook = (pcolor, ploc, hloc) => {
   let outer_lw = 2;
   let inner_lw = 2;
+  let hookRadius_inner = .7 * (hookRadius / Math.sqrt(2)); //square radius (not along diagonal)
   // draw the line
   c.beginPath();
   c.lineWidth = 1;
@@ -2531,12 +2527,15 @@ var drawHook = (pcolor, ploc, hloc) => {
   c.beginPath();
   c.lineWidth = outer_lw;
   c.strokeStyle = graphics_brightenColor(pcolor, -50);
-  c.arc(hloc.x, -hloc.y, hookRadius_outer + outer_lw / 2, 0, 2 * Math.PI);
+  c.arc(hloc.x, -hloc.y, hookRadius + outer_lw / 2, 0, 2 * Math.PI);
   c.stroke();
 }
 
-
+// --- CANVAS / SCREEN CONSTANTS ---
 var canvas = document.getElementById("canvas");
+const canv_top = canvas.getBoundingClientRect().top;
+const canv_left = canvas.getBoundingClientRect().left;
+
 var c = canvas.getContext("2d");
 
 var WIDTH = window.innerWidth;
@@ -2549,6 +2548,7 @@ var prevtime;
 var starttime;
 var currtime;
 
+// --- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ---
 let newFrame = (timestamp) => {
   if (starttime === undefined) {
     starttime = timestamp;
@@ -2601,7 +2601,7 @@ let newFrame = (timestamp) => {
 
 
 
-
+// --- LISTENERS ---
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
   let movementDirChanged = false;
@@ -2682,9 +2682,6 @@ document.addEventListener('keyup', function (event) {
 });
 
 
-const canv_top = canvas.getBoundingClientRect().top;
-const canv_left = canvas.getBoundingClientRect().left;
-
 document.addEventListener('mousedown', function (event) {
   switch (event.button) {
     //left click:
@@ -2704,7 +2701,7 @@ document.addEventListener('mousedown', function (event) {
 
 
 document.addEventListener('contextmenu', event => event.preventDefault());
-
+document.addEventListener('scroll', event => event.preventDefault());
 
 // TODO: test out moveTime in playermove and updateloc
 /**
@@ -2731,15 +2728,24 @@ Socket events received:
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (playerobj, serverPlayers, serverWorld) => {
+  const joinCallback = (playerobj, serverPlayers, serverWorld, pRad, wSpd, hRad, hSpd) => {
     localPlayer = playerobj;
     players = serverPlayers;
     world = serverWorld;
+    playerRadius = pRad;
+    walkspeed = wSpd;
+    hookRadius = hRad;
+    hookspeed = hSpd;
   };
   await send.join(joinCallback);
+
   console.log("localPlayer", localPlayer);
   console.log("players", players);
   console.log("world", world);
+  console.log("playerRadius", playerRadius);
+  console.log("walkspeed", walkspeed);
+  console.log("hookRadius", hookRadius);
+  console.log("hookspeed", hookspeed);
   // once get here, know that world, players, and loc are defined  
   // 2. start game
   window.requestAnimationFrame(newFrame);

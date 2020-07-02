@@ -22,7 +22,12 @@ const generateRandomColor = () => {
   return '#' + Math.floor(Math.random() * 16777215).toString(16);
 }
 
-
+const consts = {
+  playerRadius: 20, //pix
+  walkspeed: 124 / 1000, // pix/ms
+  hookRadius: 10, //circle radius
+  hookspeed: 200 / 1000 //pix
+}
 
 // fired when client connects
 io.on('connection', (socket) => {
@@ -38,7 +43,15 @@ io.on('connection', (socket) => {
       // hookedBy: new Set(), //players you're hooked by
     };
     //to sender: (players doesn't include newPlayer)
-    callback(newPlayer, players, world);
+    callback(
+      newPlayer,
+      players,
+      world,
+      consts.playerRadius,
+      consts.walkspeed,
+      consts.hookRadius,
+      consts.hookspeed,
+    );
 
     players[socket.id] = newPlayer;
 
