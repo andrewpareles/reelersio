@@ -31,8 +31,17 @@ const consts = {
 
 
 const a = 1 / (150 * 16); // boost decay v^2 term
-const b = 1 / (50 * 16); // boost decay constant term
-
+const b = 1 / (70 * 16); // boost decay constant term
+// v0 = init boost vel, t = time since boost started
+// Solution to dv/dt = -m(a v^2 + b) (if that's < 0, then 0)
+const boostPosition_calculate = (v0, t) => {
+  let m = 1; //m = 1 for now (it's the mass)
+  let k = Math.sqrt(a * b);
+  let h_v0 = Math.atan(a * v0 / k) / k;
+  return t < h_v0 / m ?
+    Math.log(Math.cos(k * (m * t - h_v0) / Math.cos(k * h_v0)) / (a * m))
+    : Math.log(1 / Math.cos(k * h_v0)) / (a * m);
+}
 
 // fired when client connects
 io.on('connection', (socket) => {

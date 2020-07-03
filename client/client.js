@@ -83,19 +83,8 @@ var playerRadius = null;
 var walkspeed = null; // pix/ms
 var hookRadius = null; //circle radius (the inner square hook is decoration)
 var hookspeed = null;
-var a = null;
-var b = null;
 
-// v0 = init boost vel, t = time since boost started
-// Solution to dv/dt = -m(a v^2 + b) (if that's < 0, then 0)
-const boostPosition_calculate = (v0, t) => {
-  let m = 1; //m = 1 for now (it's the mass)
-  let k = Math.sqrt(a * b);
-  let h_v0 = Math.atan(a * v0 / k) / k;
-  return t < h_v0 / m ?
-    Math.log(Math.cos(k * (m * t - h_v0) / Math.cos(k * h_v0)) / (a * m))
-    : Math.log(1 / Math.cos(k * h_v0)) / (a * m);
-}
+
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -258,16 +247,16 @@ var boost_updateOnPress = (key) => {
     // starting boost: no boost yet, so initialize 
     // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
     if (keyDirection_isOpposite(a, b) && c) {
-      boostSet(c, .3);
+      boostSet(c, .6);
     }
   }
   // currently have boost, continue it or lose it
   else {
     if (c === boostKey && !recentKeysRepeat && keyDirection_isOpposite(a, b)) {
-      boostSet(c, .3);
+      boostSet(c, .6);
     }
     else if (c === boostKey && recentKeysRepeat) {
-      boostSet(c, -boostMultiplier / 2 - .1);
+      boostSet(c, -.1);
     }
     else if (c && keyDirection_isOpposite(b, boostKey)) {
       boostSet(c, 0);
@@ -388,12 +377,13 @@ let newFrame = (timestamp) => {
   // console.log("fps: ", fps);
 
   //Multiplier decay
-  console.log("boostMultiplier:", boostMultiplier);
-  // boostMultiplier -= dt * (a * Math.pow(boostMultiplier, 2) + b);
-  // if (boostMultiplier < 0) boostMultiplier = 0;
-  // else if (boostMultiplier > 2.5) boostMultiplier = 2.5;
-
-
+  boostMultiplier -= dt * (a * Math.pow(boostMultiplier, 2) + b);
+  if (boostMultiplier < 0) boostMultiplier = 0;
+  else if (boostMultiplier > 2.5) boostMultiplier = 2.5;
+  
+  let boostMultiplierEffective = boostMultiplier > 2 ? 2 : boostMultiplier;
+  // console.log("boostMultiplier:", boostMultiplier);
+  // console.log("effective boostMultiplier:", boostMultiplierEffective);
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
@@ -411,7 +401,7 @@ let newFrame = (timestamp) => {
   localPlayer.loc = vec.add(
     localPlayer.loc,
     vec.normalized(directionPressed, walkspeed * dt),
-    vec.normalized(boostDir, boostMultiplier * walkspeed * dt)
+    vec.normalized(boostDir, boostMultiplierEffective * walkspeed * dt)
   );
   // console.log("loc: ", loc);
   drawPlayer(localPlayer.color, localPlayer.loc, true);
