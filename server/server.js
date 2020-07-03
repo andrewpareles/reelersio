@@ -3,7 +3,7 @@ var server = require('http').Server();
 var io = require('socket.io')(server);
 
 var players = {
-  // socket.id0: {
+  // player.socket.id: {
   //   loc: {x:0, y:0},
   //   username: name,
   //
@@ -29,6 +29,11 @@ const consts = {
   hookspeed: 200 / 1000 //pix
 }
 
+
+const a = 1 / (150 * 16); // boost decay v^2 term
+const b = 1 / (50 * 16); // boost decay constant term
+
+
 // fired when client connects
 io.on('connection', (socket) => {
   //set what server does on different events
@@ -51,6 +56,7 @@ io.on('connection', (socket) => {
       consts.walkspeed,
       consts.hookRadius,
       consts.hookspeed,
+      a, b,
     );
 
     players[socket.id] = newPlayer;
