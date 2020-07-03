@@ -30,8 +30,8 @@ const consts = {
 }
 
 
-const a = 1 / (150 * 16); // boost decay v^2 term
-const b = 1 / (70 * 16); // boost decay constant term
+const a = 1 / (160 * 16); // boost decay v^2 term
+const b = 1 / (80 * 16); // boost decay constant term
 // v0 = init boost vel, t = time since boost started
 // Solution to dv/dt = -m(a v^2 + b) (if that's < 0, then 0)
 const boostPosition_calculate = (v0, t) => {
