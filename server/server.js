@@ -12,6 +12,9 @@ var players = {
 var world = {
 
 };
+var lastTimeMoved = {
+  // player id -> timestamp (Date.now())
+}
 // var hooks = [{loc, vel, from, to}]
 
 const generateStartingLocation = () => {

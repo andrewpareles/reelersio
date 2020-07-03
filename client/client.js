@@ -85,6 +85,16 @@ var hookRadius = null; //circle radius (the inner square hook is decoration)
 var hookspeed = null;
 
 
+/** ---------- HELPERS FOR GLOBAL VARIABLES ---------- */
+var localPlayerVel_calculate = () => {
+  if (!boostDir) {
+    return vec.normalized(directionPressed, walkspeed);
+  }
+  else return vec.add(vec.normalized(directionPressed, walkspeed),
+    vec.normalized(boostDir, boostMultiplierEffective * walkspeed)); // walk vel + boost vel
+}
+
+
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -193,10 +203,11 @@ var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED. This multiplies walkspee
 
 /** ---------- NON-LOCAL BOOSTING VARIABLES ---------- */
 var boostDir = null; // direction of the boost (null iff no boost)
-var boostMultiplier = 0; // magnitude of boost in units of walkspeeds
+var boostMultiplier = 0; // magnitude of boost in units of walkspeed
 
 /** ---------- BOOSTING (LOCAL VARS / FUNCTIONS) ---------- */
 var boostKey = null; // key that needs to be held down for current boost to be active
+var boostMultiplierEffective = 0; // magnitude of boost in units of walkspeed that actually gets used
 
 // Record the previous 2 keys pressed
 var recentKeys = []; //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
@@ -380,8 +391,8 @@ let newFrame = (timestamp) => {
   boostMultiplier -= dt * (a * Math.pow(boostMultiplier, 2) + b);
   if (boostMultiplier < 0) boostMultiplier = 0;
   else if (boostMultiplier > 2.5) boostMultiplier = 2.5;
-  
-  let boostMultiplierEffective = boostMultiplier > 2 ? 2 : boostMultiplier;
+  boostMultiplierEffective = boostMultiplier > 2 ? 2 : boostMultiplier;
+
   // console.log("boostMultiplier:", boostMultiplier);
   // console.log("effective boostMultiplier:", boostMultiplierEffective);
   //render:
@@ -398,10 +409,8 @@ let newFrame = (timestamp) => {
   //(2) draw & update me:
   // update location
 
-  localPlayer.loc = vec.add(
-    localPlayer.loc,
-    vec.normalized(directionPressed, walkspeed * dt),
-    vec.normalized(boostDir, boostMultiplierEffective * walkspeed * dt)
+  localPlayer.loc = vec.add(localPlayer.loc,
+    vec.scalar(localPlayerVel_calculate(), dt)
   );
   // console.log("loc: ", loc);
   drawPlayer(localPlayer.color, localPlayer.loc, true);
@@ -414,11 +423,12 @@ let newFrame = (timestamp) => {
   }
 
   // if update velocity, send info to server
-  if (!vec.equals(sent.vel, localPlayer.vel)) {
-    console.log("sending loc/vel");
-    send.updateloc();
-    sent.vel = { ...localPlayer.vel };
-  }
+  // TODO make this go in button press, update server ASAP always
+  // if (!vec.equals(sent.vel, localPlayer.vel)) {
+  //   console.log("sending loc/vel");
+  //   send.updateloc();
+  //   sent.vel = { ...localPlayer.vel };
+  // }
 
   window.requestAnimationFrame(newFrame);
 }
@@ -512,7 +522,9 @@ document.addEventListener('mousedown', function (event) {
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
       let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points to mouse from player
-      let playerVel_projectedOn_hookDir = vec.dot(localPlayer.vel, hookDir);
+
+      let pVel = localPlayerVel_calculate();
+      let playerVel_projectedOn_hookDir = vec.dot(pVel, hookDir);
       let hook = {
         vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
         loc: vec.add(localPlayer.loc, vec.normalized(hookDir, playerRadius)),
