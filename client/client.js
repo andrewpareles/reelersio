@@ -84,6 +84,7 @@ var walkspeed = null; // pix/ms
 var hookRadius = null; //circle radius (the inner square hook is decoration)
 var hookspeed = null;
 
+var a0, b0, c0, d0;
 
 /** ---------- HELPERS FOR GLOBAL VARIABLES ---------- */
 var localPlayerVel_calculate = () => {
@@ -258,13 +259,13 @@ var boost_updateOnPress = (key) => {
     // starting boost: no boost yet, so initialize 
     // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
     if (keyDirection_isOpposite(a, b) && c) {
-      boostSet(c, .6);
+      boostSet(c, .5);
     }
   }
   // currently have boost, continue it or lose it
   else {
     if (c === boostKey && !recentKeysRepeat && keyDirection_isOpposite(a, b)) {
-      boostSet(c, .6);
+      boostSet(c, .5);
     }
     else if (c === boostKey && recentKeysRepeat) {
       boostSet(c, -.1);
@@ -388,13 +389,12 @@ let newFrame = (timestamp) => {
   // console.log("fps: ", fps);
 
   //Multiplier decay
-  boostMultiplier -= dt * (a * Math.pow(boostMultiplier, 2) + b);
+  boostMultiplier -= dt * (a0 * Math.pow(boostMultiplier, 2) + b0 + c0 / (boostMultiplier + d0));
   if (boostMultiplier < 0) boostMultiplier = 0;
-  else if (boostMultiplier > 2.5) boostMultiplier = 2.5;
-  boostMultiplierEffective = boostMultiplier > 2 ? 2 : boostMultiplier;
+  else if (boostMultiplier > 3) boostMultiplier = 3;
+  boostMultiplierEffective = boostMultiplier > 2.5 ? 2.5 : boostMultiplier;
 
-  // console.log("boostMultiplier:", boostMultiplier);
-  // console.log("effective boostMultiplier:", boostMultiplierEffective);
+  // console.log("effective, boostMult:", boostMultiplierEffective, boostMultiplier);
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
@@ -564,7 +564,7 @@ Socket events received:
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (playerobj, serverPlayers, serverWorld, pRad, wSpd, hRad, hSpd, serverA, serverB) => {
+  const joinCallback = (playerobj, serverPlayers, serverWorld, pRad, wSpd, hRad, hSpd, serverA, serverB, serverC, serverD) => {
     localPlayer = playerobj;
     players = serverPlayers;
     world = serverWorld;
@@ -572,8 +572,10 @@ const whenConnect = async () => {
     walkspeed = wSpd;
     hookRadius = hRad;
     hookspeed = hSpd;
-    a = serverA;
-    b = serverB;
+    a0 = serverA;
+    b0 = serverB;
+    c0 = serverC;
+    d0 = serverD;
   };
   await send.join(joinCallback);
 
@@ -584,8 +586,10 @@ const whenConnect = async () => {
   console.log("walkspeed", walkspeed);
   console.log("hookRadius", hookRadius);
   console.log("hookspeed", hookspeed);
-  console.log("a", a);
-  console.log("b", b);
+  console.log("a", a0);
+  console.log("b", b0);
+  console.log("c", c0);
+  console.log("d", d0);
   // once get here, know that world, players, and loc are defined  
   // 2. start game
   window.requestAnimationFrame(newFrame);

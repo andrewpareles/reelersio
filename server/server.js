@@ -35,9 +35,12 @@ const consts = {
 
 const a = 1 / (160 * 16); // boost decay v^2 term
 const b = 1 / (80 * 16); // boost decay constant term
+const c = 1 / (37.5 * 16); // c / (boostMult + d) term
+const d = 1 / (.5 * 16); 
 // v0 = init boost vel, t = time since boost started
 // Solution to dv/dt = -m(a v^2 + b) (if that's < 0, then 0)
 const boostPosition_calculate = (v0, t) => {
+  // TODO: UPDATE: OUTDATED SINCE ADDED c AND d
   let m = 1; //m = 1 for now (it's the mass)
   let k = Math.sqrt(a * b);
   let h_v0 = Math.atan(a * v0 / k) / k;
@@ -68,7 +71,7 @@ io.on('connection', (socket) => {
       consts.walkspeed,
       consts.hookRadius,
       consts.hookspeed,
-      a, b,
+      a, b, c, d,
     );
 
     players[socket.id] = newPlayer;
