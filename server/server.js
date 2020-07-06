@@ -1,7 +1,7 @@
 //https://socket.io/docs/server-api/
-var server = require('http').Server();
-var io = require('socket.io')(server);
-
+const server = require('http').Server();
+const io = require('socket.io')(server);
+const { vec } = require('../common/vector.js');
 
 const playerRadius = 20; //pix
 const walkspeed = 124 / 1000; // pix/ms
@@ -17,16 +17,22 @@ const d0 = 1 / (.5 * 16);
 // v0 = init boost vel, t = time since boost started
 //TODO.
 
+const boostMultEffective_max = 2.5;
+const boostMult_max = 3;
+
+const WAIT_TIME = 33; // # ms to wait to broadcast players object
+
 
 
 
 var players = {
+  /*
   "initialPlayer (socket.id)": {
     loc: generateStartingLocation(),
     vel: { x: 0, y: 0 },
 
     username: "billybob",
-    lastTimeMoved: null,
+    color: "#...",
 
     //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
     boost: {
@@ -37,36 +43,36 @@ var players = {
       recentKeys: [], //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
       recentKeysRepeat: false,
     },
+
     walk: {
       directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
       keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
     }
   }
+  */
 };
 
-var playerSendInfo = {
-  "initialPlayer (socket.id)": {
-    loc: generateStartingLocation(),
-    username: "billybob",
-  }
-};
+
+var world = {};
+
 
 var hooks = {
+  /*
   "hookid": {
     loc: { x: 187, y: 56 },
     vel: { x: 1337, y: 42 },
     from: "playerid",
     to: null
   }
-}
+  */
+};
 
 
 
 
 
 //returns true iff key 1 is parallel and in the opposite direction to key 2 
-var keyDirection_isOpposite = (key1, key2) => {
-  let [d1, d2] = [keyDirections[key1], keyDirections[key2]];
+var keyDirection_isOpposite = (d1, d2) => {
   switch (d1) {
     case "left": return d2 === "right";
     case "right": return d2 === "left";
@@ -86,9 +92,10 @@ var keyVectors = {
 
 // if k is null, there is no orthogonal key to a and b being pressed, or there are 2
 // if k is not, it's the single key pressed that's orthogonal to key k
-var keysPressed_singleOrthogonalTo = (k) => {
+var keysPressed_singleOrthogonalTo = (p, d) => {
+  let keysPressed = p.walk.keysPressed;
   let ret = null;
-  switch (keyDirections[k]) {
+  switch (d) {
     case "left":
     case "right":
       if (keysPressed.has("up")) ret = "up";
@@ -159,7 +166,7 @@ var boost_updateOnPress = (p, key) => {
   if (!a) return;
   //note b is guaranteed to exist since a key was just pressed
 
-  let c = keysPressed_singleOrthogonalTo(b);  // c is the key of the BOOST DIRECTION!!! (or null if no boost)
+  let c = keysPressed_singleOrthogonalTo(p, b);  // c is the key of the BOOST DIRECTION!!! (or null if no boost)
 
   // have no boost yet, so initialize
   if (!boost.Dir) {
@@ -265,17 +272,9 @@ var walk_updateOnRelease = (p, dir) => {
 
 
 
-
-
-
-
-
-
-
-
 var velocity_update = (p) => {
   if (!p.boost.Dir) {
-    return vec.normalized(p.boost.directionPressed, walkspeed);
+    return vec.normalized(p.walk.directionPressed, walkspeed);
   }
   else return vec.add(vec.normalized(p.walk.directionPressed, walkspeed),
     vec.normalized(p.boost.Dir, p.boost.MultiplierEffective * walkspeed)); // walk vel + boost vel
@@ -300,19 +299,9 @@ var velocity_update = (p) => {
 
 
 
-const generateStartingLocation = () => {
-  return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
-}
-
-const generateRandomColor = () => {
-  return '#' + Math.floor(Math.random() * 16777215).toString(16);
-}
 
 
 
-
-const boostMultEffective_max = 2.5;
-const boostMult_max = 3;
 
 
 
@@ -324,6 +313,8 @@ const runGame = () => {
     return;
   }
   let dt = Date.now() - prevtime;
+  prevtime = Date.now();
+  console.log("dt:", dt);
 
   for (let pid in players) {
     let p = players[pid];
@@ -340,45 +331,64 @@ const runGame = () => {
 
   for (let hid in hooks) {
     let h = hooks[hid];
-
+    // update hook location
     h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+  }
+}
+setInterval(runGame, WAIT_TIME);
+
+
+
+const generateStartingLocation = () => {
+  return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
+}
+
+const generateRandomColor = () => {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16);
+}
+
+const generateNewPlayer = (username) => {
+  return {
+    loc: generateStartingLocation(),
+    vel: { x: 0, y: 0 },
+
+    username: username,
+    color: generateRandomColor(),
+
+    //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
+    boost: {
+      Dir: null, // direction of the boost (null iff no boost)
+      Key: null, // key that needs to be held down for current boost to be active
+      Multiplier: 0, // magnitude of boost in units of walkspeed
+      MultiplierEffective: 0, // magnitude of boost in units of walkspeed that actually gets used
+      recentKeys: [], //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
+      recentKeysRepeat: false,
+    },
+    walk: {
+      directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
+      keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
+    }
   }
 }
 
 
-
-const wait_time = 33; // # ms to wait to broadcast players object
-setInterval(runGame, wait_time);
-
-
-
-
 // fired when client connects
 io.on('connection', (socket) => {
-  //set what server does on different events
 
+  //set what server does on different events
   socket.on('join', (username, callback) => {
-    let newPlayer = {
-      loc: generateStartingLocation(),
-      vel: { x: 0, y: 0 },
-      username: username,
-      color: generateRandomColor(),
-      hooks: [], //{loc: {x:, y:}, vel: {x:, y:}, hookedPlayer:"picklebob"}
-      // hookedBy: new Set(), //players you're hooked by
-    };
-    //to sender: (players doesn't include newPlayer)
-    callback(
-      newPlayer,
-      players,
-      world,
-      consts.playerRadius,
-      consts.hookRadius,
-    );
+    let newPlayer = generateNewPlayer(username);
 
     players[socket.id] = newPlayer;
 
-    //to all but sender: (players includes newPlayer)
-    socket.broadcast.emit('playerjoin', socket.id, players[socket.id]);
+    callback(
+      players,
+      hooks,
+      world,
+      playerRadius,
+      hookRadius,
+    );
+
 
     console.log("players:", players);
     // console.log(`connected socket.id: ${socket.id}`);
@@ -403,13 +413,14 @@ io.on('connection', (socket) => {
 
   socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
     let p = players[socket.id];
+    hookDir = vec.normalized(hookDir);
     let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
     let hook = {
       vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
       loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
     };
     hooks.push(hook);
-  })
+  });
 
   socket.on('disconnect', (reason) => {
     delete players[socket.id];

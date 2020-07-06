@@ -1,69 +1,21 @@
 //https://socket.io/docs/client-api/
 const io = require('socket.io-client');
+const { vec } = require('../common/vector.js');
 
 const ADDRESS = 'http://localhost:3001';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
 //vector functions on {x: , y:}:
-var vec = {
-  // add vector a and b
-  add: (...vecs) => {
-    let x = 0, y = 0;
-    for (let v of vecs) {
-      x += v.x;
-      y += v.y;
-    }
-    return { x: x, y: y };
-  },
-
-  // s*v, a is scalar, v is vector
-  scalar: (v, s) => {
-    return { x: s * v.x, y: s * v.y };
-  },
-
-  // the magnitude of the vector
-  mag: (a) => {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
-  },
-
-  // neither vector is null, and they have same values
-  equals: (a, b) => {
-    return !!a && !!b && a.x == b.x && a.y == b.y;
-  },
-
-  // vector is not null, and doesnt contain all falsy values (including 0)
-  nonzero: (a) => {
-    return !!a && (!!a.x || !!a.y);
-  },
-
-  // if unnormalizable, return the 0 vector. 
-  // Normalizes to a vector of size mag, or 1 if undefined
-  normalized: (a, mag) => {
-    if (!mag) {
-      if (mag !== 0) mag = 1;
-      else return { x: 0, y: 0 };
-    }
-    let norm = vec.mag(a);
-    return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
-  },
-
-  negative: (a) => {
-    return vec.scalar(a, -1);
-  },
-
-  dot: (a, b) => {
-    return a.x * b.x + a.y * b.y;
-  }
-}
 
 
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
-var world = null;
 var players = null;
+var playerid = null;
 var hooks = null;
+var world = null;
 
 
 
@@ -101,6 +53,9 @@ var send = {
   },
   keyreleased: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
     socket.emit('keyreleased', direction);
+  },
+  throwhook: (hookDir) => {
+    socket.emit('throwhook', hookDir);
   },
 }
 
@@ -235,7 +190,7 @@ let newFrame = (timestamp) => {
   // update location
 
   // console.log("loc: ", loc);
-  drawPlayer(localPlayer.color, localPlayer.loc, true);
+  drawPlayer(localPlayer.color, players[pid].loc, true);
 
 
   // draw & update hooks
@@ -281,7 +236,7 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points from player to mouse
+      let hookDir = vec.add(vec.negative(localPlayer.loc), mousePos); //points from player to mouse
       send.throwhook(hookDir);
       break;
   }
@@ -316,32 +271,23 @@ Socket events received:
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (playerobj, serverPlayers, serverWorld, pRad, wSpd, hRad, hSpd, serverA, serverB, serverC, serverD) => {
-    localPlayer = playerobj;
+  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad) => {
+    playerid = socket.id;
     players = serverPlayers;
+    hooks = serverHooks;
     world = serverWorld;
     playerRadius = pRad;
-    walkspeed = wSpd;
     hookRadius = hRad;
-    hookspeed = hSpd;
-    a0 = serverA;
-    b0 = serverB;
-    c0 = serverC;
-    d0 = serverD;
   };
   await send.join(joinCallback);
 
-  console.log("localPlayer", localPlayer);
+  console.log("playerid", playerid);
   console.log("players", players);
+  console.log("hooks", hooks);
   console.log("world", world);
   console.log("playerRadius", playerRadius);
-  console.log("walkspeed", walkspeed);
   console.log("hookRadius", hookRadius);
-  console.log("hookspeed", hookspeed);
-  console.log("a", a0);
-  console.log("b", b0);
-  console.log("c", c0);
-  console.log("d", d0);
+  
   // once get here, know that world, players, and loc are defined  
   // 2. start game
   window.requestAnimationFrame(newFrame);
@@ -356,16 +302,6 @@ const playerJoin = (playerid, playerobj) => {
   console.log("players", players);
 }
 socket.on('playerjoin', playerJoin);
-
-
-
-const playerMove = (playerid, newLoc, newVel) => {
-  console.log("player moved", playerid, newLoc, newVel);
-  players[playerid].loc = newLoc;
-  players[playerid].vel = newVel;
-}
-socket.on('playermove', playerMove);
-
 
 
 const playerDisconnect = (playerid) => {
