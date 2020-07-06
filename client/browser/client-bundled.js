@@ -2210,7 +2210,7 @@ process.umask = function() { return 0; };
 },{}],6:[function(require,module,exports){
 //https://socket.io/docs/client-api/
 const io = require('socket.io-client');
-const {vec} = require('../common/vector.js');
+const { vec } = require('../common/vector.js');
 
 const ADDRESS = 'http://localhost:3001';
 const socket = io(ADDRESS);
@@ -2222,9 +2222,10 @@ const socket = io(ADDRESS);
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
-var world = null;
 var players = null;
+var playerid = null;
 var hooks = null;
+var world = null;
 
 
 
@@ -2309,7 +2310,10 @@ function graphics_brightenColor(col, amt) {
 }
 
 
-var drawPlayer = (color, loc) => {
+var drawPlayer = (p) => {
+  let color = p.color;
+  let loc = p.loc;
+
   c.beginPath();
   c.lineWidth = 6;//isLocalPlayer ? 4 : 2;
   c.strokeStyle = color;
@@ -2324,7 +2328,11 @@ var drawPlayer = (color, loc) => {
 
 }
 
-var drawHook = (pcolor, ploc, hloc) => {
+var drawHook = (h) => {
+  let pcolor = hooks[h.from].color;
+  let ploc = hooks[h.from].loc;
+  let hloc = h.loc;
+
   let outer_lw = 2;
   let inner_lw = 2;
   let hookRadius_inner = .7 * (hookRadius / Math.sqrt(2)); //square radius (not along diagonal)
@@ -2389,22 +2397,20 @@ let newFrame = (timestamp) => {
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
-  //(1) draw & update others
-  for (let p in players) {
+  //(1) draw & update everyone
+  for (let pid in players) {
+    let p = players[pid];
     //update other players by interpolating velocity
-    drawPlayer(players[p].color, players[p].loc);
+    drawPlayer(p);
   }
 
   //(2) draw & update me:
   // update location
 
-  // console.log("loc: ", loc);
-  drawPlayer(localPlayer.color, players[pid].loc, true);
-
-
   // draw & update hooks
-  for (let h of localPlayer.hooks) {
-    drawHook(localPlayer.color, localPlayer.loc, h.loc);
+  for (let hid in hooks) {
+    let h = hooks[hid];
+    drawHook(h);
   }
 
   window.requestAnimationFrame(newFrame);
@@ -2445,7 +2451,7 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.add(vec.negative(localPlayer.loc), mousePos); //points from player to mouse
+      let hookDir = vec.add(vec.negative(players[playerid].loc), mousePos); //points from player to mouse
       send.throwhook(hookDir);
       break;
   }
@@ -2480,33 +2486,24 @@ Socket events received:
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (playerobj, serverPlayers, serverWorld, pRad, wSpd, hRad, hSpd, serverA, serverB, serverC, serverD) => {
-    localPlayer = playerobj;
+  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad) => {
+    playerid = socket.id;
     players = serverPlayers;
+    hooks = serverHooks;
     world = serverWorld;
     playerRadius = pRad;
-    walkspeed = wSpd;
     hookRadius = hRad;
-    hookspeed = hSpd;
-    a0 = serverA;
-    b0 = serverB;
-    c0 = serverC;
-    d0 = serverD;
   };
   await send.join(joinCallback);
 
-  console.log("localPlayer", localPlayer);
+  console.log("playerid", playerid);
   console.log("players", players);
+  console.log("hooks", hooks);
   console.log("world", world);
   console.log("playerRadius", playerRadius);
-  console.log("walkspeed", walkspeed);
   console.log("hookRadius", hookRadius);
-  console.log("hookspeed", hookspeed);
-  console.log("a", a0);
-  console.log("b", b0);
-  console.log("c", c0);
-  console.log("d", d0);
-  // once get here, know that world, players, and loc are defined  
+
+  // once get here, know that everything is defined, so can start rendering  
   // 2. start game
   window.requestAnimationFrame(newFrame);
 }
@@ -2514,12 +2511,12 @@ socket.on('connect', whenConnect);
 
 
 
-const playerJoin = (playerid, playerobj) => {
-  console.log("player joining", playerid, playerobj);
-  players[playerid] = playerobj;
-  console.log("players", players);
+const serverImage = (serverPlayers, serverHooks, serverWorld) => {
+  players = serverPlayers;
+  hooks = serverHooks;
+  world = serverWorld;
 }
-socket.on('playerjoin', playerJoin);
+socket.on('serverimage', serverImage);
 
 
 const playerDisconnect = (playerid) => {
@@ -8773,54 +8770,65 @@ yeast.decode = decode;
 module.exports = yeast;
 
 },{}],52:[function(require,module,exports){
-exports.vec = {
-  // add vector a and b
-  add: (...vecs) => {
-    let x = 0, y = 0;
-    for (let v of vecs) {
-      x += v.x;
-      y += v.y;
-    }
-    return { x: x, y: y };
-  },
-
-  // s*v, a is scalar, v is vector
-  scalar: (v, s) => {
-    return { x: s * v.x, y: s * v.y };
-  },
-
-  // the magnitude of the vector
-  mag: (a) => {
-    return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
-  },
-
-  // neither vector is null, and they have same values
-  equals: (a, b) => {
-    return !!a && !!b && a.x == b.x && a.y == b.y;
-  },
-
-  // vector is not null, and doesnt contain all falsy values (including 0)
-  nonzero: (a) => {
-    return !!a && (!!a.x || !!a.y);
-  },
-
-  // if unnormalizable, return the 0 vector. 
-  // Normalizes to a vector of size mag, or 1 if undefined
-  normalized: (a, mag) => {
-    if (!mag) {
-      if (mag !== 0) mag = 1;
-      else return { x: 0, y: 0 };
-    }
-    let norm = vec.mag(a);
-    return norm == 0 ? { x: 0, y: 0 } : vec.scalar(a, mag / norm);
-  },
-
-  negative: (a) => {
-    return vec.scalar(a, -1);
-  },
-
-  dot: (a, b) => {
-    return a.x * b.x + a.y * b.y;
+// add any number of vectors
+const add = (...vecs) => {
+  let x = 0, y = 0;
+  for (let v of vecs) {
+    x += v.x;
+    y += v.y;
   }
+  return { x: x, y: y };
+};
+
+// s*v, a is scalar, v is vector
+const scalar = (v, s) => {
+  return { x: s * v.x, y: s * v.y };
+};
+
+// the magnitude of the vector
+const magnitude = (a) => {
+  return Math.sqrt(Math.pow(a.x, 2) + Math.pow(a.y, 2));
+};
+
+// neither vector is null, and they have same values
+const equals = (a, b) => {
+  return !!a && !!b && a.x == b.x && a.y == b.y;
+};
+
+// vector is not null, and doesnt contain all falsy values (including 0)
+const nonzero = (a) => {
+  return !!a && (!!a.x || !!a.y);
+};
+
+// if unnormalizable, return the 0 vector. 
+// Normalizes to a vector of size mag, or 1 if undefined
+const normalized = (a, mag) => {
+  if (!mag) {
+    if (mag !== 0) mag = 1;
+    else return { x: 0, y: 0 };
+  }
+  let norm = magnitude(a);
+  return norm == 0 ? { x: 0, y: 0 } : scalar(a, mag / norm);
+};
+
+const negative = (a) => {
+  return scalar(a, -1);
+};
+
+const dot = (a, b) => {
+  return a.x * b.x + a.y * b.y;
 }
+
+exports.vec = {
+  add: add,
+  scalar: scalar,
+  magnitude: magnitude,
+  equals: equals,
+  nonzero: nonzero,
+  normalized: normalized,
+  negative: negative,
+  dot: dot,
+
+}
+
 },{}]},{},[6]);

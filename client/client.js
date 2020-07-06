@@ -100,7 +100,10 @@ function graphics_brightenColor(col, amt) {
 }
 
 
-var drawPlayer = (color, loc) => {
+var drawPlayer = (p) => {
+  let color = p.color;
+  let loc = p.loc;
+
   c.beginPath();
   c.lineWidth = 6;//isLocalPlayer ? 4 : 2;
   c.strokeStyle = color;
@@ -115,7 +118,11 @@ var drawPlayer = (color, loc) => {
 
 }
 
-var drawHook = (pcolor, ploc, hloc) => {
+var drawHook = (h) => {
+  let pcolor = hooks[h.from].color;
+  let ploc = hooks[h.from].loc;
+  let hloc = h.loc;
+
   let outer_lw = 2;
   let inner_lw = 2;
   let hookRadius_inner = .7 * (hookRadius / Math.sqrt(2)); //square radius (not along diagonal)
@@ -180,22 +187,20 @@ let newFrame = (timestamp) => {
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
-  //(1) draw & update others
-  for (let p in players) {
+  //(1) draw & update everyone
+  for (let pid in players) {
+    let p = players[pid];
     //update other players by interpolating velocity
-    drawPlayer(players[p].color, players[p].loc);
+    drawPlayer(p);
   }
 
   //(2) draw & update me:
   // update location
 
-  // console.log("loc: ", loc);
-  drawPlayer(localPlayer.color, players[pid].loc, true);
-
-
   // draw & update hooks
-  for (let h of localPlayer.hooks) {
-    drawHook(localPlayer.color, localPlayer.loc, h.loc);
+  for (let hid in hooks) {
+    let h = hooks[hid];
+    drawHook(h);
   }
 
   window.requestAnimationFrame(newFrame);
@@ -236,7 +241,7 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.add(vec.negative(localPlayer.loc), mousePos); //points from player to mouse
+      let hookDir = vec.add(vec.negative(players[playerid].loc), mousePos); //points from player to mouse
       send.throwhook(hookDir);
       break;
   }
@@ -287,8 +292,8 @@ const whenConnect = async () => {
   console.log("world", world);
   console.log("playerRadius", playerRadius);
   console.log("hookRadius", hookRadius);
-  
-  // once get here, know that world, players, and loc are defined  
+
+  // once get here, know that everything is defined, so can start rendering  
   // 2. start game
   window.requestAnimationFrame(newFrame);
 }
@@ -296,12 +301,12 @@ socket.on('connect', whenConnect);
 
 
 
-const playerJoin = (playerid, playerobj) => {
-  console.log("player joining", playerid, playerobj);
-  players[playerid] = playerobj;
-  console.log("players", players);
+const serverImage = (serverPlayers, serverHooks, serverWorld) => {
+  players = serverPlayers;
+  hooks = serverHooks;
+  world = serverWorld;
 }
-socket.on('playerjoin', playerJoin);
+socket.on('serverimage', serverImage);
 
 
 const playerDisconnect = (playerid) => {

@@ -20,11 +20,11 @@ const d0 = 1 / (.5 * 16);
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 
-const WAIT_TIME = 33; // # ms to wait to broadcast players object
+const WAIT_TIME = 16; // # ms to wait to broadcast players object
 
 
 
-
+// PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
   /*
   "initialPlayer (socket.id)": {
@@ -33,7 +33,15 @@ var players = {
 
     username: "billybob",
     color: "#...",
+  }
+  */
+};
 
+
+// LOCAL (SERVER SIDE) PLAYER INFO
+var playersInfo = {
+  /*
+  "initialPlayer (socket.id)": {
     //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
     boost: {
       Dir: null, // direction of the boost (null iff no boost)
@@ -48,10 +56,9 @@ var players = {
       directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
       keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
     }
-  }
+  },
   */
-};
-
+}
 
 var world = {};
 
@@ -92,8 +99,8 @@ var keyVectors = {
 
 // if k is null, there is no orthogonal key to a and b being pressed, or there are 2
 // if k is not, it's the single key pressed that's orthogonal to key k
-var keysPressed_singleOrthogonalTo = (p, d) => {
-  let keysPressed = p.walk.keysPressed;
+var keysPressed_singleOrthogonalTo = (pInfo, d) => {
+  let keysPressed = pInfo.walk.keysPressed;
   let ret = null;
   switch (d) {
     case "left":
@@ -123,30 +130,30 @@ var keysPressed_singleOrthogonalTo = (p, d) => {
 
 
 
-var recentKeys_insert = (p, key) => {
-  if (key === p.boost.recentKeys[1]) { //repeat
-    p.boost.recentKeysRepeat = true;
+var recentKeys_insert = (pInfo, key) => {
+  if (key === pInfo.boost.recentKeys[1]) { //repeat
+    pInfo.boost.recentKeysRepeat = true;
   } else { // no repeat
-    p.boost.recentKeysRepeat = false;
-    p.boost.recentKeys[0] = p.boost.recentKeys[1];
-    p.boost.recentKeys[1] = key;
+    pInfo.boost.recentKeysRepeat = false;
+    pInfo.boost.recentKeys[0] = pInfo.boost.recentKeys[1];
+    pInfo.boost.recentKeys[1] = key;
   }
 }
 // stops player from being able to continue / initiate boost (they have to redo as if standing still with no keys pressed yet)
-var boostReset = (p) => {
-  p.boost.Multiplier = 0;
-  p.boost.Dir = null;
-  p.boost.Key = null;
-  p.boost.recentKeys = [];
-  p.boost.recentKeysRepeat = false;
+var boostReset = (pInfo) => {
+  pInfo.boost.Multiplier = 0;
+  pInfo.boost.Dir = null;
+  pInfo.boost.Key = null;
+  pInfo.boost.recentKeys = [];
+  pInfo.boost.recentKeysRepeat = false;
 }
 // creates a boost in direction of key k, with boostMultipler increased by inc
-var boostSet = (p, k, inc) => {
-  p.boost.Multiplier += inc;
-  if (p.boost.Multiplier <= 0) boostReset();
+var boostSet = (pInfo, k, inc) => {
+  pInfo.boost.Multiplier += inc;
+  if (pInfo.boost.Multiplier <= 0) boostReset(pInfo);
   else {
-    p.boost.Dir = keyVectors[k];
-    p.boost.Key = k;
+    pInfo.boost.Dir = keyVectors[k];
+    pInfo.boost.Key = k;
   }
 }
 
@@ -154,41 +161,41 @@ var boostSet = (p, k, inc) => {
 
 
 
-// Can assume that the last entry in recentKeys is not null, since 
-// which is true since this is called after a WASD key is pressed
-// updates boost.Dir and boost.Key
-var boost_updateOnPress = (p, key) => {
+// Can assume that the last entry in recentKeys is not null 
+// since this is called after a WASD key is pressed
+// updates pInfo.boost.Dir and pInfo.boost.Key
+var boost_updateOnPress = (pInfo, key) => {
 
-  recentKeys_insert(p, key);
+  recentKeys_insert(pInfo, key);
 
-  let a = recentKeys[0];
-  let b = recentKeys[1];
+  let a = pInfo.boost.recentKeys[0];
+  let b = pInfo.boost.recentKeys[1];
   if (!a) return;
   //note b is guaranteed to exist since a key was just pressed
 
-  let c = keysPressed_singleOrthogonalTo(p, b);  // c is the key of the BOOST DIRECTION!!! (or null if no boost)
+  let c = keysPressed_singleOrthogonalTo(pInfo, b);  // c is the key of the BOOST DIRECTION!!! (or null if no boost)
 
   // have no boost yet, so initialize
-  if (!boost.Dir) {
+  if (!pInfo.boost.Dir) {
     // starting boost: no boost yet, so initialize 
     // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
     if (keyDirection_isOpposite(a, b) && c) {
-      boostSet(p, c, .5);
+      boostSet(pInfo, c, .5);
     }
   }
   // currently have boost, continue it or lose it
   else {
-    if (c === boost.Key && !recentKeysRepeat && keyDirection_isOpposite(a, b)) {
-      boostSet(p, c, .5);
+    if (c === pInfo.boost.Key && !pInfo.boost.recentKeysRepeat && keyDirection_isOpposite(a, b)) {
+      boostSet(pInfo, c, .5);
     }
-    else if (c === boost.Key && recentKeysRepeat) {
-      boostSet(p, c, -.1);
+    else if (c === pInfo.boost.Key && pInfo.boost.recentKeysRepeat) {
+      boostSet(pInfo, c, -.1);
     }
-    else if (c && keyDirection_isOpposite(b, boost.Key)) {
-      boostSet(p, c, 0);
+    else if (c && keyDirection_isOpposite(b, pInfo.boost.Key)) {
+      boostSet(pInfo, c, 0);
     }
     else {
-      boostReset(p);
+      boostReset(pInfo);
     }
   }
 
@@ -205,66 +212,32 @@ var boost_updateOnRelease = (p, keyReleased) => {
 }
 
 
-var walk_updateOnPress = (p, dir) => {
-  let keysPressed = p.walk.keysPressed;
-  let directionPressed = p.walk.directionPressed;
+var walk_updateOnPress = (pInfo, dir) => {
+  let pKeysPressed = pInfo.walk.keysPressed;
+  let pDirectionPressed = pInfo.walk.directionPressed;
   switch (dir) {
     case "up":
-      if (!keysPressed.has(key)) {
-        directionPressed.y += 1;
-        keysPressed.add(key);
+      if (!pKeysPressed.has(dir)) {
+        pDirectionPressed.y += 1;
+        pKeysPressed.add(dir);
       }
       break;
     case "down":
-      if (!keysPressed.has(key)) {
-        directionPressed.y += -1;
-        keysPressed.add(key);
-      }
-      break;
-    case keyBindings["left"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.x += -1;
-        keysPressed.add(key);
-      }
-      break;
-    case keyBindings["right"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.x += 1;
-        keysPressed.add(key);
-      }
-      break;
-  }
-}
-
-
-
-var walk_updateOnRelease = (p, dir) => {
-  let keysPressed = p.walk.keysPressed;
-  let directionPressed = p.walk.directionPressed;
-
-  switch (key) {
-    case "up":
-      if (keysPressed.has(key)) {
-        directionPressed.y -= 1;
-        keysPressed.delete(key);
-      }
-      break;
-    case "down":
-      if (keysPressed.has(key)) {
-        directionPressed.y -= -1;
-        keysPressed.delete(key);
+      if (!pKeysPressed.has(dir)) {
+        pDirectionPressed.y += -1;
+        pKeysPressed.add(dir);
       }
       break;
     case "left":
-      if (keysPressed.has(key)) {
-        directionPressed.x -= -1;
-        keysPressed.delete(key);
+      if (!pKeysPressed.has(dir)) {
+        pDirectionPressed.x += -1;
+        pKeysPressed.add(dir);
       }
       break;
     case "right":
-      if (keysPressed.has(key)) {
-        directionPressed.x -= 1;
-        keysPressed.delete(key);
+      if (!pKeysPressed.has(dir)) {
+        pDirectionPressed.x += 1;
+        pKeysPressed.add(dir);
       }
       break;
   }
@@ -272,70 +245,53 @@ var walk_updateOnRelease = (p, dir) => {
 
 
 
-var velocity_update = (p) => {
-  if (!p.boost.Dir) {
-    return vec.normalized(p.walk.directionPressed, walkspeed);
+var walk_updateOnRelease = (pInfo, dir) => {
+  let pKeysPressed = pInfo.walk.keysPressed;
+  let pDirectionPressed = pInfo.walk.directionPressed;
+  switch (dir) {
+    case "up":
+      if (pKeysPressed.has(dir)) {
+        pDirectionPressed.y -= 1;
+        pKeysPressed.delete(dir);
+      }
+      break;
+    case "down":
+      if (pKeysPressed.has(dir)) {
+        pDirectionPressed.y -= -1;
+        pKeysPressed.delete(dir);
+      }
+      break;
+    case "left":
+      if (pKeysPressed.has(dir)) {
+        pDirectionPressed.x -= -1;
+        pKeysPressed.delete(dir);
+      }
+      break;
+    case "right":
+      if (pKeysPressed.has(dir)) {
+        pDirectionPressed.x -= 1;
+        pKeysPressed.delete(dir);
+      }
+      break;
   }
-  else return vec.add(vec.normalized(p.walk.directionPressed, walkspeed),
-    vec.normalized(p.boost.Dir, p.boost.MultiplierEffective * walkspeed)); // walk vel + boost vel
+}
+
+
+
+var velocity_update = (pInfo, p) => {
+  if (!pInfo.boost.Dir) {
+    p.vel = vec.normalized(pInfo.walk.directionPressed, walkspeed);
+  }
+  else {
+    p.vel = vec.add(vec.normalized(pInfo.walk.directionPressed, walkspeed),
+      vec.normalized(pInfo.boost.Dir, pInfo.boost.MultiplierEffective * walkspeed)); // walk vel + boost vel
+  }
 }
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-var prevtime = null;
-const runGame = () => {
-  if (!prevtime) {
-    prevtime = Date.now();
-    return;
-  }
-  let dt = Date.now() - prevtime;
-  prevtime = Date.now();
-  console.log("dt:", dt);
-
-  for (let pid in players) {
-    let p = players[pid];
-
-    //boost decay
-    p.boost.Multiplier -= dt * (a0 * Math.pow(p.boost.Multiplier, 2) + b0 + c0 / (p.boost.Multiplier + d0));
-    if (p.boost.Multiplier <= 0) p.boost.Multiplier = 0;
-    else if (p.boost.Multiplier > boostMult_max) p.boost.Multiplier = boostMult_max;
-    p.boost.MultiplierEffective = p.boost.Multiplier > boostMultEffective_max ? boostMultEffective_max : p.boost.Multiplier;
-
-    // update player location
-    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
-  }
-
-  for (let hid in hooks) {
-    let h = hooks[hid];
-    // update hook location
-    h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
-  }
-}
-setInterval(runGame, WAIT_TIME);
 
 
 
@@ -347,28 +303,31 @@ const generateRandomColor = () => {
   return '#' + Math.floor(Math.random() * 16777215).toString(16);
 }
 
-const generateNewPlayer = (username) => {
-  return {
-    loc: generateStartingLocation(),
-    vel: { x: 0, y: 0 },
+const generateNewPlayerAndInfo = (username) => {
+  return [
+    {// PLAYER:
+      loc: generateStartingLocation(),
+      vel: { x: 0, y: 0 },
 
-    username: username,
-    color: generateRandomColor(),
-
-    //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
-    boost: {
-      Dir: null, // direction of the boost (null iff no boost)
-      Key: null, // key that needs to be held down for current boost to be active
-      Multiplier: 0, // magnitude of boost in units of walkspeed
-      MultiplierEffective: 0, // magnitude of boost in units of walkspeed that actually gets used
-      recentKeys: [], //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
-      recentKeysRepeat: false,
+      username: username,
+      color: generateRandomColor(),
     },
-    walk: {
-      directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
-      keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
+    // PLAYER INFO:
+    {//NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
+      boost: {
+        Dir: null, // direction of the boost (null iff no boost)
+        Key: null, // key that needs to be held down for current boost to be active
+        Multiplier: 0, // magnitude of boost in units of walkspeed
+        MultiplierEffective: 0, // magnitude of boost in units of walkspeed that actually gets used
+        recentKeys: [], //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
+        recentKeysRepeat: false,
+      },
+      walk: {
+        directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
+        keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
+      }
     }
-  }
+  ]
 }
 
 
@@ -377,9 +336,10 @@ io.on('connection', (socket) => {
 
   //set what server does on different events
   socket.on('join', (username, callback) => {
-    let newPlayer = generateNewPlayer(username);
+    let [newPlayer, newPlayerInfo] = generateNewPlayerAndInfo(username);
 
     players[socket.id] = newPlayer;
+    playersInfo[socket.id] = newPlayerInfo;
 
     callback(
       players,
@@ -398,17 +358,19 @@ io.on('connection', (socket) => {
 
 
   socket.on('keypressed', (dir) => {// dir is up, down, left, or right
+    let pInfo = playersInfo[socket.id];
     let p = players[socket.id];
-    walk_updateOnPress(p, dir);
-    boost_updateOnPress(p, dir);
-    velocity_update(p);
+    walk_updateOnPress(pInfo, dir);
+    boost_updateOnPress(pInfo, dir);
+    velocity_update(pInfo, p);
   });
 
   socket.on('keyreleased', (dir) => {// dir is up, down, left, or right
+    let pInfo = playersInfo[socket.id];
     let p = players[socket.id];
-    walk_updateOnRelease(p, dir);
-    boost_updateOnRelease(p, dir);
-    velocity_update(p);
+    walk_updateOnRelease(pInfo, dir);
+    boost_updateOnRelease(pInfo, dir);
+    velocity_update(pInfo, p);
   });
 
   socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
@@ -419,7 +381,7 @@ io.on('connection', (socket) => {
       vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
       loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
     };
-    hooks.push(hook);
+    // hooks.push(hook);
   });
 
   socket.on('disconnect', (reason) => {
@@ -434,3 +396,49 @@ io.on('connection', (socket) => {
 server.listen(3001, function () {
   console.log('listening on *:3001');
 });
+
+
+
+
+
+
+
+
+
+
+
+// ---------- RUN GAME ----------
+
+var prevtime = null;
+const runGame = () => {
+  if (!prevtime) {
+    prevtime = Date.now();
+    return;
+  }
+  let dt = Date.now() - prevtime;
+  prevtime = Date.now();
+  // console.log("dt:", dt);
+
+  for (let pid in players) {
+    let pInfo = playersInfo[pid];
+    let p = players[pid];
+
+    //boost decay
+    pInfo.boost.Multiplier -= dt * (a0 * Math.pow(pInfo.boost.Multiplier, 2) + b0 + c0 / (pInfo.boost.Multiplier + d0));
+    if (pInfo.boost.Multiplier <= 0) pInfo.boost.Multiplier = 0;
+    else if (pInfo.boost.Multiplier > boostMult_max) pInfo.boost.Multiplier = boostMult_max;
+    pInfo.boost.MultiplierEffective = pInfo.boost.Multiplier > boostMultEffective_max ? boostMultEffective_max : pInfo.boost.Multiplier;
+
+    // update player location
+    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+  }
+
+  for (let hid in hooks) {
+    let h = hooks[hid];
+    // update hook location
+    h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+  }
+
+  io.emit('serverimage', players, hooks, world);
+}
+setInterval(runGame, WAIT_TIME);
