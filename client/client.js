@@ -61,39 +61,10 @@ var vec = {
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
-var localPlayer = null;
 var world = null;
 var players = null;
-//players does not include yourself
-// 1. send 'join' event to server, server gives you players, world, localPlayer
-// 2. on player join, add that new player to players
-// once initialized, 
-//players = {
-//  otherplayer.socket.id: {
-//  loc: {x:0, y:0},
-//  vel: {x:0, y:0}, //velocity. Note vel.y is UP, not down (unlike how it's drawn)
-//  username: user1,
-//  hooks: {loc: hookloc, vel: hookvel, hookedPlayer: player}
-//  isHooked: false // make your base walkspeed slower if true
-//  }, 
-//  }, 
-//  }, 
-//}
-var playerRadius = null;
-var walkspeed = null; // pix/ms
-var hookRadius = null; //circle radius (the inner square hook is decoration)
-var hookspeed = null;
+var hooks = null;
 
-var a0, b0, c0, d0;
-
-/** ---------- HELPERS FOR GLOBAL VARIABLES ---------- */
-var localPlayerVel_calculate = () => {
-  if (!boostDir) {
-    return vec.normalized(directionPressed, walkspeed);
-  }
-  else return vec.add(vec.normalized(directionPressed, walkspeed),
-    vec.normalized(boostDir, boostMultiplierEffective * walkspeed)); // walk vel + boost vel
-}
 
 
 
@@ -125,10 +96,11 @@ var send = {
     socket.emit('join', 'user1', new_callback);
     await new_promise;
   },
-  // sent to update your location to the server:
-  updateloc: () => { // sends loc & vel
-    // const buf2 = Buffer.from('bytes');
-    socket.emit('updateloc', localPlayer.loc, localPlayer.vel);
+  keypressed: (direction) => { // tells server that user just pressed a key (direction = "up|down|left|right")
+    socket.emit('keypressed', direction);
+  },
+  keyreleased: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
+    socket.emit('keyreleased', direction);
   },
 }
 
@@ -147,147 +119,6 @@ var keyDirections = {
   's': "down",
   'a': "left",
   'd': "right"
-}
-
-//returns true iff key 1 is parallel and in the opposite direction to key 2 
-var keyDirection_isOpposite = (key1, key2) => {
-  let [d1, d2] = [keyDirections[key1], keyDirections[key2]];
-  switch (d1) {
-    case "left": return d2 === "right";
-    case "right": return d2 === "left";
-    case "up": return d2 === "down";
-    case "down": return d2 === "up";
-  }
-}
-
-// assumes these are normalized
-var keyVectors = {
-  'w': { x: 0, y: 1 },
-  's': { x: 0, y: -1 }, //must = -up
-  'a': { x: -1, y: 0 }, //must = -right
-  'd': { x: 1, y: 0 }
-}
-
-// contains 'w', 'a', 's', or 'd' (movement keys, not something like 'p' unless keybindings are changed)
-var keysPressed = new Set();
-
-// if k is null, there is no orthogonal key to a and b being pressed, or there are 2
-// if k is not, it's the single key pressed that's orthogonal to key k
-var keysPressed_singleOrthogonalTo = (k) => {
-  let ret = null;
-  switch (keyDirections[k]) {
-    case "left":
-    case "right":
-      if (keysPressed.has(keyBindings["up"])) ret = keyBindings["up"];
-      if (keysPressed.has(keyBindings["down"])) {
-        if (ret) ret = null;
-        else {
-          ret = keyBindings["down"];
-        }
-      }
-      break;
-    case "up":
-    case "down":
-      if (keysPressed.has(keyBindings["left"])) ret = keyBindings["left"];
-      if (keysPressed.has(keyBindings["right"])) {
-        if (ret) ret = null;
-        else {
-          ret = keyBindings["right"];
-        }
-      }
-      break;
-  }
-  return ret;
-}
-
-var directionPressed = { x: 0, y: 0 } //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
-
-/** ---------- NON-LOCAL BOOSTING VARIABLES ---------- */
-var boostDir = null; // direction of the boost (null iff no boost)
-var boostMultiplier = 0; // magnitude of boost in units of walkspeed
-
-/** ---------- BOOSTING (LOCAL VARS / FUNCTIONS) ---------- */
-var boostKey = null; // key that needs to be held down for current boost to be active
-var boostMultiplierEffective = 0; // magnitude of boost in units of walkspeed that actually gets used
-
-// Record the previous 2 keys pressed
-var recentKeys = []; //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
-var recentKeysRepeat = false;
-var recentKeys_insert = (key) => {
-  if (key === recentKeys[1]) { //repeat
-    recentKeysRepeat = true;
-  } else { // no repeat
-    recentKeysRepeat = false;
-    recentKeys[0] = recentKeys[1];
-    recentKeys[1] = key;
-  }
-}
-// stops player from being able to continue / initiate boost (they have to redo as if standing still with no keys pressed yet)
-var boostReset = () => {
-  boostMultiplier = 0;
-  boostDir = null;
-  boostKey = null;
-  recentKeys = [];
-  recentKeysRepeat = false;
-}
-// creates a boost in direction of key k, with boostMultipler increased by inc
-var boostSet = (k, inc) => {
-  boostMultiplier += inc;
-  if (boostMultiplier <= 0) boostReset();
-  else {
-    boostDir = keyVectors[k];
-    boostKey = k;
-  }
-}
-
-
-// Can assume that the last entry in recentKeys is not null, since 
-// which is true since this is called after a WASD key is pressed
-// updates boostDir and boostKey
-var boost_updateOnPress = (key) => {
-  recentKeys_insert(key);
-
-  let a = recentKeys[0];
-  let b = recentKeys[1];
-  if (!a) return;
-  //note b is guaranteed to exist since a key was just pressed
-
-  let c = keysPressed_singleOrthogonalTo(b);  // c is the key of the BOOST DIRECTION!!! (or null if no boost)
-
-  // have no boost yet, so initialize
-  if (!boostDir) {
-    // starting boost: no boost yet, so initialize 
-    // (1) recentKeys(a,b) where a,b are // and opposite and c is pressed and orthogonal to a and b
-    if (keyDirection_isOpposite(a, b) && c) {
-      boostSet(c, .5);
-    }
-  }
-  // currently have boost, continue it or lose it
-  else {
-    if (c === boostKey && !recentKeysRepeat && keyDirection_isOpposite(a, b)) {
-      boostSet(c, .5);
-    }
-    else if (c === boostKey && recentKeysRepeat) {
-      boostSet(c, -.1);
-    }
-    else if (c && keyDirection_isOpposite(b, boostKey)) {
-      boostSet(c, 0);
-    }
-    else {
-      boostReset();
-    }
-  }
-
-}
-
-var boost_updateOnRelease = (keyReleased) => {
-  if (boostKey) { // W and A/D boost
-    if (keysPressed.size === 0
-      || (keyReleased === boostKey && keysPressed.size !== 1)) { //reset boost
-
-      boostReset();
-    }
-  }
 }
 
 
@@ -389,10 +220,6 @@ let newFrame = (timestamp) => {
   // console.log("fps: ", fps);
 
   //Multiplier decay
-  boostMultiplier -= dt * (a0 * Math.pow(boostMultiplier, 2) + b0 + c0 / (boostMultiplier + d0));
-  if (boostMultiplier < 0) boostMultiplier = 0;
-  else if (boostMultiplier > 3) boostMultiplier = 3;
-  boostMultiplierEffective = boostMultiplier > 2.5 ? 2.5 : boostMultiplier;
 
   // console.log("effective, boostMult:", boostMultiplierEffective, boostMultiplier);
   //render:
@@ -401,34 +228,20 @@ let newFrame = (timestamp) => {
   //(1) draw & update others
   for (let p in players) {
     //update other players by interpolating velocity
-    players[p].loc = vec.add(players[p].loc, vec.scalar(players[p].vel, dt));
-    // console.log("players[p].loc:", players[p].loc);
     drawPlayer(players[p].color, players[p].loc);
   }
 
   //(2) draw & update me:
   // update location
 
-  localPlayer.loc = vec.add(localPlayer.loc,
-    vec.scalar(localPlayerVel_calculate(), dt)
-  );
   // console.log("loc: ", loc);
   drawPlayer(localPlayer.color, localPlayer.loc, true);
 
 
   // draw & update hooks
   for (let h of localPlayer.hooks) {
-    h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
     drawHook(localPlayer.color, localPlayer.loc, h.loc);
   }
-
-  // if update velocity, send info to server
-  // TODO make this go in button press, update server ASAP always
-  // if (!vec.equals(sent.vel, localPlayer.vel)) {
-  //   console.log("sending loc/vel");
-  //   send.updateloc();
-  //   sent.vel = { ...localPlayer.vel };
-  // }
 
   window.requestAnimationFrame(newFrame);
 }
@@ -436,82 +249,29 @@ let newFrame = (timestamp) => {
 
 
 
+
+
+
+
+
+
+
 /** ---------- LISTENERS ---------- */
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
-  let movementDirChanged = false;
-  switch (key) {
-    case keyBindings["up"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.y += 1;
-        keysPressed.add(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["down"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.y += -1;
-        keysPressed.add(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["left"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.x += -1;
-        keysPressed.add(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["right"]:
-      if (!keysPressed.has(key)) {
-        directionPressed.x += 1;
-        keysPressed.add(key);
-        movementDirChanged = true;
-      }
-      break;
-  }
+  let movementDir = keyDirections[key];
 
-  if (movementDirChanged) { //ie WASD was pressed, not some other key
-    boost_updateOnPress(key);
+  if (movementDir) { //ie WASD was pressed, not some other key
+    send.keypressed(movementDir);
   }
 });
 
 document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
-  let movementDirChanged = false;
-  switch (key) {
-    case keyBindings["up"]:
-      if (keysPressed.has(key)) {
-        directionPressed.y -= 1;
-        keysPressed.delete(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["down"]:
-      if (keysPressed.has(key)) {
-        directionPressed.y -= -1;
-        keysPressed.delete(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["left"]:
-      if (keysPressed.has(key)) {
-        directionPressed.x -= -1;
-        keysPressed.delete(key);
-        movementDirChanged = true;
-      }
-      break;
-    case keyBindings["right"]:
-      if (keysPressed.has(key)) {
-        directionPressed.x -= 1;
-        keysPressed.delete(key);
-        movementDirChanged = true;
-      }
-      break;
-  }
+  let movementDir = keyDirections[key];
 
-  if (movementDirChanged) {
-    boost_updateOnRelease(key);
+  if (movementDir) {
+    send.keyreleased(movementDir);
   }
 });
 
@@ -521,23 +281,15 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points to mouse from player
-
-      let pVel = localPlayerVel_calculate();
-      let playerVel_projectedOn_hookDir = vec.dot(pVel, hookDir);
-      let hook = {
-        vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
-        loc: vec.add(localPlayer.loc, vec.normalized(hookDir, playerRadius)),
-      };
-      localPlayer.hooks.push(hook);
-      // console.log("projvel", vec.mag(hook.vel));
+      let hookDir = vec.normalized(vec.add(vec.negative(localPlayer.loc), mousePos)); //points from player to mouse
+      send.throwhook(hookDir);
       break;
   }
 });
 
 
 document.addEventListener('contextmenu', event => event.preventDefault());
-document.addEventListener('scroll', event => event.preventDefault());
+
 
 // TODO: test out moveTime in playermove and updateloc
 /**

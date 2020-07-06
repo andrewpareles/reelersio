@@ -2747,7 +2747,7 @@ document.addEventListener('mousedown', function (event) {
 
 
 document.addEventListener('contextmenu', event => event.preventDefault());
-document.addEventListener('scroll', event => event.preventDefault());
+document.addEventListener('scroll', event => {});
 
 // TODO: test out moveTime in playermove and updateloc
 /**
