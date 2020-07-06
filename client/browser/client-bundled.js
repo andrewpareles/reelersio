@@ -2227,7 +2227,8 @@ var playerid = null;
 var world = null;
 
 
-
+// up, down, left, right
+var keysPressedLocal = new Set();
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -2426,6 +2427,10 @@ let newFrame = (timestamp) => {
 /** ---------- LISTENERS ---------- */
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
+  
+  if (keysPressedLocal.has(key)) return;
+  keysPressedLocal.add(key);
+  
   let movementDir = keyDirections[key];
 
   if (movementDir) { //ie WASD was pressed, not some other key
@@ -2435,6 +2440,10 @@ document.addEventListener('keydown', function (event) {
 
 document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
+
+  if (!keysPressedLocal.has(key)) return;
+  keysPressedLocal.delete(key);
+
   let movementDir = keyDirections[key];
 
   if (movementDir) {
