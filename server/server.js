@@ -15,32 +15,42 @@ const c0 = 1 / (37.5 * 16); // c / (boostMult + d) term
 const d0 = 1 / (.5 * 16);
 // Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
 // v0 = init boost vel, t = time since boost started
-//TODO.
+
+
+//TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
 
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
+const hookCutoffDistance = 500;
 
-const WAIT_TIME = 16; // # ms to wait to broadcast players object
+const WAIT_TIME = 1; // # ms to wait to broadcast players object
 
 
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
   /*
-  "initialPlayer (socket.id)": {
-    loc: generateStartingLocation(),
-    vel: { x: 0, y: 0 },
-
-    username: "billybob",
-    color: "#...",
-  }
-  */
+    "initialPlayer (socket.id)": {
+      loc: { x: 0, y: 0 },//generateStartingLocation(),
+      vel: { x: 0, y: 0 },
+  
+      username: "billybob",
+      color: "orange",
+      hooks: new Set(
+        {
+          loc: { x: 0, y: 0 },
+          vel: { x: 0, y: 0 },
+          to: null
+        }
+      )
+    }
+    */
 };
 
 
 // LOCAL (SERVER SIDE) PLAYER INFO
 var playersInfo = {
-  /*
+
   "initialPlayer (socket.id)": {
     //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
     boost: {
@@ -57,23 +67,10 @@ var playersInfo = {
       keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
     }
   },
-  */
+
 }
 
 var world = {};
-
-
-var hooks = {
-  /*
-  "hookid": {
-    loc: { x: 187, y: 56 },
-    vel: { x: 1337, y: 42 },
-    from: "playerid",
-    to: null
-  }
-  */
-};
-
 
 
 
@@ -201,12 +198,12 @@ var boost_updateOnPress = (pInfo, key) => {
 
 }
 
-var boost_updateOnRelease = (p, keyReleased) => {
-  if (p.boost.Key) { // W and A/D boost
-    if (p.walk.keysPressed.size === 0
-      || (keyReleased === p.boost.Key && p.walk.keysPressed.size !== 1)) { //reset boost
-
-      boostReset(p);
+var boost_updateOnRelease = (pInfo, keyReleased) => {
+  if (pInfo.boost.Key) { // W and A/D boost
+    if (pInfo.walk.keysPressed.size === 0
+      || (keyReleased === pInfo.boost.Key && pInfo.walk.keysPressed.size !== 1)) { //reset boost
+      console.log("resetting");
+      boostReset(pInfo);
     }
   }
 }
@@ -294,7 +291,6 @@ var velocity_update = (pInfo, p) => {
 
 
 
-
 const generateStartingLocation = () => {
   return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
 }
@@ -308,9 +304,9 @@ const generateNewPlayerAndInfo = (username) => {
     {// PLAYER:
       loc: generateStartingLocation(),
       vel: { x: 0, y: 0 },
-
       username: username,
       color: generateRandomColor(),
+      hooks: [],
     },
     // PLAYER INFO:
     {//NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
@@ -343,7 +339,6 @@ io.on('connection', (socket) => {
 
     callback(
       players,
-      hooks,
       world,
       playerRadius,
       hookRadius,
@@ -374,14 +369,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
+    console.log("throwing hook");
     let p = players[socket.id];
     hookDir = vec.normalized(hookDir);
     let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
     let hook = {
       vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
       loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
+      to: null,
     };
-    // hooks.push(hook);
+    p.hooks.push(hook);
+
   });
 
   socket.on('disconnect', (reason) => {
@@ -396,13 +394,6 @@ io.on('connection', (socket) => {
 server.listen(3001, function () {
   console.log('listening on *:3001');
 });
-
-
-
-
-
-
-
 
 
 
@@ -423,7 +414,7 @@ const runGame = () => {
     let pInfo = playersInfo[pid];
     let p = players[pid];
 
-    //boost decay
+    // boost decay
     pInfo.boost.Multiplier -= dt * (a0 * Math.pow(pInfo.boost.Multiplier, 2) + b0 + c0 / (pInfo.boost.Multiplier + d0));
     if (pInfo.boost.Multiplier <= 0) pInfo.boost.Multiplier = 0;
     else if (pInfo.boost.Multiplier > boostMult_max) pInfo.boost.Multiplier = boostMult_max;
@@ -431,14 +422,31 @@ const runGame = () => {
 
     // update player location
     p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+
+    for (let h of p.hooks) {
+      // update hook location
+      h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+      // delete hook if too far
+      if (vec.magnitude(vec.add(h.loc, vec.negative(p.loc))) > hookCutoffDistance) {
+        p.hooks = [];
+        continue;
+      }
+      //check for collisions
+      for (let pid2 in players) {
+        if (pid2 == pid) continue;
+        let p2 = players[pid2];
+        if (vec.isCollided(p2.loc, playerRadius, h.loc, hookRadius)) {
+          h.loc = p2.loc;
+          h.vel = p2.vel;
+          continue;
+        }
+      }
+
+    }
   }
 
-  for (let hid in hooks) {
-    let h = hooks[hid];
-    // update hook location
-    h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
-  }
 
-  io.emit('serverimage', players, hooks, world);
+
+  io.emit('serverimage', players, world);
 }
 setInterval(runGame, WAIT_TIME);

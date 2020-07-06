@@ -14,7 +14,6 @@ const socket = io(ADDRESS);
  */
 var players = null;
 var playerid = null;
-var hooks = null;
 var world = null;
 
 
@@ -118,9 +117,9 @@ var drawPlayer = (p) => {
 
 }
 
-var drawHook = (h) => {
-  let pcolor = hooks[h.from].color;
-  let ploc = hooks[h.from].loc;
+var drawHook = (p, h) => {
+  let pcolor = p.color;
+  let ploc = p.loc;
   let hloc = h.loc;
 
   let outer_lw = 2;
@@ -187,21 +186,19 @@ let newFrame = (timestamp) => {
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
-  //(1) draw & update everyone
   for (let pid in players) {
     let p = players[pid];
     //update other players by interpolating velocity
     drawPlayer(p);
+
+    // draw & update hooks
+    console.log("hooks", p.hooks);
+    for (let hid in p.hooks) {
+      let h = p.hooks[hid];
+      drawHook(p, h);
+    }
   }
 
-  //(2) draw & update me:
-  // update location
-
-  // draw & update hooks
-  for (let hid in hooks) {
-    let h = hooks[hid];
-    drawHook(h);
-  }
 
   window.requestAnimationFrame(newFrame);
 }
@@ -251,35 +248,14 @@ document.addEventListener('mousedown', function (event) {
 document.addEventListener('contextmenu', event => event.preventDefault());
 
 
-// TODO: test out moveTime in playermove and updateloc
-/**
-Socket events sent:
-  join (username, callback):
-  - server: calls callback, emits newplayer to all others
-  - note that client must wait for callback since it initializes world, players, and localPlayer 
-  updateloc (loc, vel):
-  - server: updates player's loc & vel , emits loc & vel to all others
-
-Socket events received:
-  connect(whenConnect):
-  - client: sends join to server, and waits for callback to be run
-  playerjoin(playerid, username, loc):
-  - client: adds player to players
-  playermove(playerid, loc, vel):
-  - client: sets playerid's loc to loc
-  playerdisconnect(playersocketid):
-  - client: removes playersocketid from players
-*/
-
 
 
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad) => {
+  const joinCallback = (serverPlayers, serverWorld, pRad, hRad) => {
     playerid = socket.id;
     players = serverPlayers;
-    hooks = serverHooks;
     world = serverWorld;
     playerRadius = pRad;
     hookRadius = hRad;
@@ -288,7 +264,6 @@ const whenConnect = async () => {
 
   console.log("playerid", playerid);
   console.log("players", players);
-  console.log("hooks", hooks);
   console.log("world", world);
   console.log("playerRadius", playerRadius);
   console.log("hookRadius", hookRadius);
@@ -301,9 +276,8 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverHooks, serverWorld) => {
+const serverImage = (serverPlayers, serverWorld) => {
   players = serverPlayers;
-  hooks = serverHooks;
   world = serverWorld;
 }
 socket.on('serverimage', serverImage);
