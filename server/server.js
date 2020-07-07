@@ -504,32 +504,32 @@ const runGame = () => {
 
   for (let hid in hooks) {
     let h = hooks[hid];
+    let pid = h.from; //pid = id of player the hook is from
+    let p = players[pid]; //p = player that the hook is from
+
     //if the hook isn't attached to anyone
     if (!h.to) {
-      let pid = h.from; //pid = id of player the hook is from
-      let p = players[pid]; //p = player that the hook is from
       // if collided with self, delete the hook
       if (vec.isCollided(p.loc, playerRadius, h.loc, hookRadius)) {
         hook_delete(hid);
+        continue;
       }
-      //if too far, reset hook
-      else if (h.isResetting || vec.magnitude(vec.sub(p.loc, h.loc)) > hookCutoffDistance) {
-        hook_reset(hid);
-      } else {
-        // else, check for a player collision with this hook
+      // else, check for a player collision with this hook
+      else {
         for (let pid2 in players) {
           let p2 = players[pid2];
           if (vec.isCollided(p2.loc, playerRadius, h.loc, hookRadius)) {
-            if (pid2 === pid) {
-              hook_delete(hid);
-            }
-            else {
-              hook_attach(pid2, hid);
-            }
+            hook_attach(pid2, hid);
+            h.isResetting = false;
             break;
           }
         }
       }
+    }
+
+    //if too far, reset hook
+    if (h.isResetting || vec.magnitude(vec.sub(p.loc, h.loc)) > hookCutoffDistance) {
+      hook_reset(hid);
     }
 
     // update hook location
