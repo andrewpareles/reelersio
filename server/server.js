@@ -27,7 +27,7 @@ const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
 
-const WAIT_TIME = 1; // # ms to wait to broadcast players object
+const WAIT_TIME = 16; // # ms to wait to broadcast players object
 
 
 
@@ -304,7 +304,6 @@ var hook_attach = (toID, hid) => {
   //update hooks[hid]'s to and player's attached
   hooks[hid].to = toID;
   playersInfo[toID].hooks.attached.add(hid);
-  hooks[hid].loc = null;
   hooks[hid].vel = null;
 }
 
@@ -314,10 +313,10 @@ var hook_reel = (pInfo) => {
   for (let hid of pInfo.hooks.owned) {
     let h = hooks[hid];
     let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
-    
-    let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
 
-    
+    let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
+    if (playerVel_projectedOn_reelDir < 0) playerVel_projectedOn_reelDir = 0;
+
     if (h.to) {
       let hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
       // reel in hook and player
@@ -351,11 +350,14 @@ var hook_delete = (hid) => {
 
 
 
-var hook_reset = (h) => {
+var hook_reset = (hid) => {
+  let h = hooks[hid];
+  h.isResetting = true;
   h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
-  h.to = null;
-  if (h.to)
-    h.isResetting = true;
+  if (h.to) {
+    if (players[h.to].followHook === hid) players[h.to].followHook = null;
+    h.to = null;
+  }
 }
 
 /** ---------- SOCKET CALLS & FUNCTIONS ---------- */
@@ -470,7 +472,7 @@ io.on('connection', (socket) => {
     // detach & pull in all hooks that are attached to player
     for (let hid of playersInfo[socket.id].hooks.attached) {
       playersInfo[socket.id].hooks.attached.delete(hid);
-      hook_reset(hooks[hid]);
+      hook_reset(hid);
     }
 
     delete players[socket.id];
@@ -512,7 +514,7 @@ const runGame = () => {
       }
       //if too far, reset hook
       else if (h.isResetting || vec.magnitude(vec.sub(p.loc, h.loc)) > hookCutoffDistance) {
-        hook_reset(h);
+        hook_reset(hid);
       } else {
         // else, check for a player collision with this hook
         for (let pid2 in players) {
