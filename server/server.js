@@ -22,7 +22,7 @@ const d0 = 1 / (.5 * 16);
 
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
-
+//TODO: MAKE SURE HOOK INVARIANTS ARE ALWAYS HELD, DETERMINE WHAT THEY ARE, SIMPLIFY, WAIT TILL HOOK LEAVES PLAYER TO DO ANYTHING
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
