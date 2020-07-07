@@ -47,10 +47,14 @@ const dot = (a, b) => {
   return a.x * b.x + a.y * b.y;
 }
 
-const isCollided = (loc1, r1, loc2, r2) => {
-  return magnitude(add(loc1, negative(loc2))) <= r1 + r2
+const isCollided = (a, r_a, b, r_b) => {
+  return magnitude(add(a, negative(b))) < r_a + r_b
 }
 
+// a - b. a = to, b = from
+const sub = (a, b) => {
+  return add(a, negative(b));
+}
 exports.vec = {
   add: add,
   scalar: scalar,
@@ -61,5 +65,6 @@ exports.vec = {
   negative: negative,
   dot: dot,
   isCollided: isCollided,
+  sub: sub,
 
 }

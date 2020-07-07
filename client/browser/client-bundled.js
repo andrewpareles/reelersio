@@ -2258,27 +2258,23 @@ var send = {
     socket.emit('join', 'user1', new_callback);
     await new_promise;
   },
-  keypressed: (direction) => { // tells server that user just pressed a key (direction = "up|down|left|right")
-    socket.emit('keypressed', direction);
+  goindirection: (direction) => { // tells server that user just pressed a key (direction = "up|down|left|right")
+    socket.emit('goindirection', direction);
   },
-  keyreleased: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
-    socket.emit('keyreleased', direction);
+  stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
+    socket.emit('stopindirection', direction);
   },
   throwhook: (hookDir) => {
     socket.emit('throwhook', hookDir);
+  },
+  reelhooks: () => {
+    socket.emit('reelhooks');
   },
 }
 
 
 
 /** ---------- KEYBOARD (ALL LOCAL) ---------- */
-var keyBindings = {
-  up: 'w',
-  down: 's',
-  left: 'a',
-  right: 'd'
-}
-
 var keyDirections = {
   'w': "up",
   's': "down",
@@ -2328,7 +2324,8 @@ var drawPlayer = (p) => {
 
 }
 
-var drawHook = (p, h) => {
+var drawHook = (h) => {
+  let p = players[h.from];
   let pcolor = p.color;
   let ploc = p.loc;
   let hloc = h.loc;
@@ -2401,15 +2398,13 @@ let newFrame = (timestamp) => {
     let p = players[pid];
     //update other players by interpolating velocity
     drawPlayer(p);
-
-    // draw & update hooks
-    console.log("hooks", p.hooks);
-    for (let hid in p.hooks) {
-      let h = p.hooks[hid];
-      drawHook(p, h);
-    }
   }
 
+  // draw & update hooks
+  for (let hid in hooks) {
+    let h = hooks[hid];
+    drawHook(h);
+  }
 
   window.requestAnimationFrame(newFrame);
 }
@@ -2427,27 +2422,21 @@ let newFrame = (timestamp) => {
 /** ---------- LISTENERS ---------- */
 document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
-  
   if (keysPressedLocal.has(key)) return;
   keysPressedLocal.add(key);
-  
   let movementDir = keyDirections[key];
-
   if (movementDir) { //ie WASD was pressed, not some other key
-    send.keypressed(movementDir);
+    send.goindirection(movementDir);
   }
 });
 
 document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
-
   if (!keysPressedLocal.has(key)) return;
   keysPressedLocal.delete(key);
-
   let movementDir = keyDirections[key];
-
   if (movementDir) {
-    send.keyreleased(movementDir);
+    send.stopindirection(movementDir);
   }
 });
 
@@ -2457,9 +2446,14 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.add(vec.negative(players[playerid].loc), mousePos); //points from player to mouse
+      let hookDir = vec.sub(mousePos, players[playerid].loc); //points from player to mouse
       send.throwhook(hookDir);
       break;
+    //right click
+    case 2:
+      send.reelhooks();
+      break;
+
   }
 });
 
@@ -2472,9 +2466,10 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (serverPlayers, serverWorld, pRad, hRad) => {
+  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad) => {
     playerid = socket.id;
     players = serverPlayers;
+    hooks = serverHooks;
     world = serverWorld;
     playerRadius = pRad;
     hookRadius = hRad;
@@ -2483,6 +2478,7 @@ const whenConnect = async () => {
 
   console.log("playerid", playerid);
   console.log("players", players);
+  console.log("hooks", hooks);
   console.log("world", world);
   console.log("playerRadius", playerRadius);
   console.log("hookRadius", hookRadius);
@@ -2495,8 +2491,10 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverWorld) => {
+const serverImage = (serverPlayers, serverHooks, serverWorld) => {
+  if (!players) console.log("too early");
   players = serverPlayers;
+  hooks = serverHooks;
   world = serverWorld;
 }
 socket.on('serverimage', serverImage);
@@ -8802,10 +8800,14 @@ const dot = (a, b) => {
   return a.x * b.x + a.y * b.y;
 }
 
-const isCollided = (loc1, r1, loc2, r2) => {
-  return magnitude(add(loc1, negative(loc2))) <= r1 + r2
+const isCollided = (a, r_a, b, r_b) => {
+  return magnitude(add(a, negative(b))) < r_a + r_b
 }
 
+// a - b. a = to, b = from
+const sub = (a, b) => {
+  return add(a, negative(b));
+}
 exports.vec = {
   add: add,
   scalar: scalar,
@@ -8816,6 +8818,7 @@ exports.vec = {
   negative: negative,
   dot: dot,
   isCollided: isCollided,
+  sub: sub,
 
 }
 

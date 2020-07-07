@@ -6,7 +6,11 @@ const { vec } = require('../common/vector.js');
 const playerRadius = 20; //pix
 const walkspeed = 124 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
-const hookspeed = 200 / 1000; //pix
+
+const hookspeed = 200 / 1000;
+const hookspeed_reset = 500 / 1000;
+const hookspeedreel_player = 80 / 1000;
+const hookspeedreel_noplayer = 300 / 1000;
 
 
 const a0 = 1 / (160 * 16); // boost decay v^2 term
@@ -33,20 +37,13 @@ var players = {
     "initialPlayer (socket.id)": {
       loc: { x: 0, y: 0 },//generateStartingLocation(),
       vel: { x: 0, y: 0 },
-  
+      followHook: hid, //most recent attached hook to follow
+
       username: "billybob",
       color: "orange",
-      hooks: new Set(
-        {
-          loc: { x: 0, y: 0 },
-          vel: { x: 0, y: 0 },
-          to: null
-        }
-      )
     }
     */
 };
-
 
 // LOCAL (SERVER SIDE) PLAYER INFO
 var playersInfo = {
@@ -64,8 +61,26 @@ var playersInfo = {
       walk: {
         directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
         keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
+      },
+
+      hooks: {
+        owned: new Set(), //hook ids originating from this player
+        attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
       }
     },
+  */
+}
+
+
+var hooks = {
+  /* 
+  hid: {
+    from, 
+    to, 
+    loc,
+    vel,
+    isReelingPlayer,
+  }
   */
 }
 
@@ -73,6 +88,17 @@ var world = {};
 
 
 
+
+// game assumes these are normalized
+var keyVectors = {
+  'up': { x: 0, y: 1 },
+  'down': { x: 0, y: -1 }, //must = -up
+  'left': { x: -1, y: 0 }, //must = -right
+  'right': { x: 1, y: 0 }
+}
+
+
+/** ---------- LOCAL PLAYER KEY, BOOST, AND WALK FUNCTIONS ---------- */
 
 //returns true iff key 1 is parallel and in the opposite direction to key 2 
 var keyDirection_isOpposite = (d1, d2) => {
@@ -83,15 +109,6 @@ var keyDirection_isOpposite = (d1, d2) => {
     case "down": return d2 === "up";
   }
 }
-
-// assumes these are normalized
-var keyVectors = {
-  'up': { x: 0, y: 1 },
-  'down': { x: 0, y: -1 }, //must = -up
-  'left': { x: -1, y: 0 }, //must = -right
-  'right': { x: 1, y: 0 }
-}
-
 
 // if k is null, there is no orthogonal key to a and b being pressed, or there are 2
 // if k is not, it's the single key pressed that's orthogonal to key k
@@ -122,8 +139,6 @@ var keysPressed_singleOrthogonalTo = (pInfo, d) => {
   }
   return ret;
 }
-
-
 
 
 var recentKeys_insert = (pInfo, key) => {
@@ -223,7 +238,6 @@ var walk_updateOnPress = (pInfo, dir) => {
 }
 
 
-
 var walk_updateOnRelease = (pInfo, dir) => {
   let pDirectionPressed = pInfo.walk.directionPressed;
   switch (dir) {
@@ -231,7 +245,7 @@ var walk_updateOnRelease = (pInfo, dir) => {
     case "down":
     case "left":
     case "right":
-      pInfo.walk.directionPressed = vec.add(pDirectionPressed, vec.negative(keyVectors[dir]));
+      pInfo.walk.directionPressed = vec.sub(pDirectionPressed, keyVectors[dir]);
       break;
   }
 }
@@ -257,11 +271,94 @@ var velocity_update = (pInfo, p) => {
   }
 }
 
+var generateHID = () => {
+  let hid;
+  do {
+    hid = Math.random().toString(36).substring(2);
+  } while (hooks[hid]);
+  return hid;
+}
 
 
 
+var hook_throw = (pid, hookDir) => {
+  let p = players[pid];
+  hookDir = vec.normalized(hookDir);
+  let hid = generateHID();
+  let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
+  let hook = {
+    from: pid,
+    to: null,
+    loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius + hookRadius)),
+    vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
+    isResetting: false,
+    isReelingPlayer: false, // true iff the to player is being reeled, ie iff players[to].followHook == this.hid
+  };
+  hooks[hid] = hook;
+  playersInfo[pid].hooks.owned.add(hid);
+}
 
 
+
+var hook_attach = (toID, hid) => {
+  //update hooks[hid]'s to and player's attached
+  hooks[hid].to = toID;
+  playersInfo[toID].hooks.attached.add(hid);
+  hooks[hid].loc = null;
+  hooks[hid].vel = null;
+}
+
+
+
+var hook_reel = (pInfo) => {
+  for (let hid of pInfo.hooks.owned) {
+    let h = hooks[hid];
+    let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
+    
+    let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
+
+    
+    if (h.to) {
+      let hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
+      // reel in hook and player
+      h.loc = players[h.to].loc;
+      h.vel = hookVel;
+      players[h.to].followHook = hid;
+      h.isReelingPlayer = true;
+      for (let hid2 of playersInfo[h.to].hooks.attached) hooks[hid2].isReelingPlayer = false;
+    }
+    else {
+      let hookVel = vec.normalized(reelDir, hookspeedreel_noplayer);
+      // reel in hook
+      h.vel = hookVel;
+    }
+  }
+}
+
+
+
+var hook_delete = (hid) => {
+  let h = hooks[hid];
+  //delete from from, to, followHook, and hooks ( h = hooks[hid] )
+  playersInfo[h.from].hooks.owned.delete(hid); //from
+  if (h.to) {  //to & followHook
+    playersInfo[h.to].hooks.attached.delete(hid);
+    if (players[h.to].followHook === hid) players[h.to].followHook = null;
+  }
+  delete hooks[hid]; //hooks
+  console.log('hooks after delete', hooks);
+}
+
+
+
+var hook_reset = (h) => {
+  h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
+  h.to = null;
+  if (h.to)
+    h.isResetting = true;
+}
+
+/** ---------- SOCKET CALLS & FUNCTIONS ---------- */
 
 const generateStartingLocation = () => {
   return { x: 10 + Math.random() * 20, y: 10 + Math.random() * -100 };
@@ -276,9 +373,9 @@ const generateNewPlayerAndInfo = (username) => {
     {// PLAYER:
       loc: generateStartingLocation(),
       vel: { x: 0, y: 0 },
+      followHook: null,
       username: username,
       color: generateRandomColor(),
-      hooks: [],
     },
     // PLAYER INFO:
     {//NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
@@ -292,38 +389,38 @@ const generateNewPlayerAndInfo = (username) => {
       walk: {
         directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
         keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
+      },
+      hooks: {
+        owned: new Set(), //hook ids originating from this player
+        attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
       }
     }
   ]
 }
 
 
+//if you want to understand the game, this is where to do it:
 // fired when client connects
 io.on('connection', (socket) => {
 
   //set what server does on different events
   socket.on('join', (username, callback) => {
     let [newPlayer, newPlayerInfo] = generateNewPlayerAndInfo(username);
-
     players[socket.id] = newPlayer;
     playersInfo[socket.id] = newPlayerInfo;
-
     callback(
       players,
+      hooks,
       world,
       playerRadius,
       hookRadius,
     );
-
-
     console.log("players:", players);
-    // console.log(`connected socket.id: ${socket.id}`);
-    // console.log(`players: ${JSON.stringify(players, null, 3)}`);
+    console.log("hooks:", hooks);
   });
 
 
-
-  socket.on('keypressed', (dir) => {// dir is up, down, left, or right
+  socket.on('goindirection', (dir) => {// dir is up, down, left, or right
     let pInfo = playersInfo[socket.id];
     if (!pInfo.walk.keysPressed.has(dir)) {
       pInfo.walk.keysPressed.add(dir);
@@ -332,7 +429,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('keyreleased', (dir) => {// dir is up, down, left, or right
+
+  socket.on('stopindirection', (dir) => {// dir is up, down, left, or right
     let pInfo = playersInfo[socket.id];
     if (pInfo.walk.keysPressed.has(dir)) {
       pInfo.walk.keysPressed.delete(dir);
@@ -341,20 +439,40 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
-    let p = players[socket.id];
-    hookDir = vec.normalized(hookDir);
-    let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
-    let hook = {
-      vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
-      loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
-      to: null,
-    };
-    p.hooks.push(hook);
 
+  socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
+    console.log('throwing hook');
+    console.log('hooks', hooks);
+    let pInfo = playersInfo[socket.id];
+    if (pInfo.hooks.owned.size < 1) {
+      hook_throw(socket.id, hookDir);
+    }
   });
 
+  socket.on('reelhooks', () => {
+    let pInfo = playersInfo[socket.id];
+    if (pInfo.hooks.owned.size >= 1) {
+      hook_reel(pInfo);
+    }
+  });
+
+
   socket.on('disconnect', (reason) => {
+    // detach & remove all hooks that were from player
+    for (let hid of playersInfo[socket.id].hooks.owned) {
+      if (hooks[hid].to) {
+        playersInfo[hooks[hid].to].hooks.attached.delete(hid);
+        if (players[hooks[hid].to].followHook) players[hooks[hid].to].followHook = null;
+      }
+      delete hooks[hid];
+    }
+
+    // detach & pull in all hooks that are attached to player
+    for (let hid of playersInfo[socket.id].hooks.attached) {
+      playersInfo[socket.id].hooks.attached.delete(hid);
+      hook_reset(hooks[hid]);
+    }
+
     delete players[socket.id];
     socket.broadcast.emit('playerdisconnect', socket.id);
   });
@@ -369,8 +487,7 @@ server.listen(3001, function () {
 
 
 
-
-// ---------- RUN GAME ----------
+// ---------- RUN GAME (socket calls do the updating, this just runs it) ----------
 
 var prevtime = null;
 const runGame = () => {
@@ -382,41 +499,60 @@ const runGame = () => {
   prevtime = Date.now();
   // console.log("dt:", dt);
 
-  for (let pid in players) {
-    let pInfo = playersInfo[pid];
-    let p = players[pid];
 
-    // boost decay & update velocity
-    velocity_decay(pInfo, dt);
-    velocity_update(pInfo, p);
-
-    // update player location
-    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
-
-    for (let h of p.hooks) {
-      // update hook location
-      h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
-      // delete hook if too far
-      if (vec.magnitude(vec.add(h.loc, vec.negative(p.loc))) > hookCutoffDistance) {
-        p.hooks = [];
-        continue;
+  for (let hid in hooks) {
+    let h = hooks[hid];
+    //if the hook isn't attached to anyone
+    if (!h.to) {
+      let pid = h.from; //pid = id of player the hook is from
+      let p = players[pid]; //p = player that the hook is from
+      // if collided with self, delete the hook
+      if (vec.isCollided(p.loc, playerRadius, h.loc, hookRadius)) {
+        hook_delete(hid);
       }
-      //check for collisions
-      for (let pid2 in players) {
-        if (pid2 == pid) continue;
-        let p2 = players[pid2];
-        if (vec.isCollided(p2.loc, playerRadius, h.loc, hookRadius)) {
-          h.loc = p2.loc;
-          h.vel = p2.vel;
-          continue;
+      //if too far, reset hook
+      else if (h.isResetting || vec.magnitude(vec.sub(p.loc, h.loc)) > hookCutoffDistance) {
+        hook_reset(h);
+      } else {
+        // else, check for a player collision with this hook
+        for (let pid2 in players) {
+          let p2 = players[pid2];
+          if (vec.isCollided(p2.loc, playerRadius, h.loc, hookRadius)) {
+            if (pid2 === pid) {
+              hook_delete(hid);
+            }
+            else {
+              hook_attach(pid2, hid);
+            }
+            break;
+          }
         }
       }
-
     }
+
+    // update hook location
+    h.loc = h.vel ? vec.add(h.loc, vec.scalar(h.vel, dt)) : players[h.to].loc;
   }
 
 
 
-  io.emit('serverimage', players, world);
+  for (let pid in players) {
+    let pInfo = playersInfo[pid];
+    let p = players[pid];
+
+    if (p.followHook) {
+      p.loc = hooks[p.followHook].loc;
+    } else {
+      // boost decay & update velocity
+      velocity_decay(pInfo, dt);
+      velocity_update(pInfo, p);
+
+      // update player location
+      p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+    }
+  }
+
+
+  io.emit('serverimage', players, hooks, world);
 }
 setInterval(runGame, WAIT_TIME);
