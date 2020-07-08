@@ -296,7 +296,7 @@ var velocity_decay = (pInfo, dt) => {
 }
 
 var velocity_update = (pInfo, p, followHook) => {
-  const speed = followHook ? walkspeed : walkspeed_hooked;
+  const speed = followHook ? walkspeed_hooked : walkspeed;
   //calculate velocity
   if (!pInfo.boost.Dir) {
     p.vel = vec.normalized(pInfo.walk.directionPressed, speed);
@@ -311,7 +311,7 @@ var velocity_update = (pInfo, p, followHook) => {
 
 /** ---------- HOOK FUNCTIONS ----------  */
 var getOwned = (pid_from) => {
-  return playersInfo[pid_from].hooks.attached;
+  return playersInfo[pid_from].hooks.owned;
 }
 var getAttached = (pid_to) => {
   return playersInfo[pid_to].hooks.attached;
@@ -336,7 +336,7 @@ var createNewHook = (pid_from, hookDir) => {
     loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius + hookRadius)),
     vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
     isResetting: false,
-    cooldown: 0,
+    waitTillExit: new Set(),
   };
   let hid = generateHID();
   return [hid, hook];
@@ -346,6 +346,7 @@ var createNewHook = (pid_from, hookDir) => {
 var hook_throw = (pid_from, hookDir) => {
   let [hid, hook] = createNewHook(pid_from, hookDir);
   hooks[hid] = hook;
+  hook.waitTillExit.add(pid_from);
   getOwned(pid_from).add(hid);
 }
 
@@ -361,6 +362,7 @@ var hook_attach = (pid_to, hid) => {
 
 var hook_reel = (pInfo) => {
   for (let hid of pInfo.hooks.owned) {
+    console.log('hid', hid);
     let h = hooks[hid];
     let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
     let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
@@ -368,6 +370,7 @@ var hook_reel = (pInfo) => {
 
     let hookVel;
     if (h.to) {
+      console.log('h.to', h.to);
       hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
       playersInfo[h.to].hooks.followHook = hid;
     }
@@ -399,10 +402,18 @@ var hook_detach = (hid, setWaitTillExit) => {
 }
 
 //updates velocity for when hook is in isResetting mode
-// it's a good idea to call hook_detach before running this...
+// should call hook_reset_init before running this...
 var hook_reset_velocity_update = (h) => {
   h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
 }
+
+// should call hook_detach before running this...
+var hook_reset_init = (hid) => {
+  let h = hooks[hid];
+  h.isResetting = true;
+  hook_reset_velocity_update(h);
+}
+
 
 //delete hook from hooks, from.owned, and to.attached, and followHook
 //note: don't need to call detach, it happens here (and more efficiently)
@@ -413,15 +424,15 @@ var hook_delete = (hid) => {
   //to (attached) & followHook (this could be replaced with hook_detach, but detach has a little more we don't need)
   hook_detach_playersInfo(hid);
   delete hooks[hid]; //hooks
-  console.log('hooks after delete', hooks);
+  // console.log('hooks after delete', hooks);
 }
 
 
 var cooldown_decay = (pInfo, dt) => {
-  if (pInfo.reel_cooldown) {
-    pInfo.reel_cooldown -= dt;
-    if (pInfo.reel_cooldown <= 0)
-      pInfo.reel_cooldown = null;
+  if (pInfo.hooks.reel_cooldown) {
+    pInfo.hooks.reel_cooldown -= dt;
+    if (pInfo.hooks.reel_cooldown <= 0)
+      pInfo.hooks.reel_cooldown = null;
   }
 }
 
@@ -461,6 +472,7 @@ const createNewPlayerAndInfo = (username) => {
       hooks: {
         owned: new Set(), //hook ids originating from this player
         attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
+        reel_cooldown: 0,
       }
     }
   ]
@@ -509,8 +521,7 @@ io.on('connection', (socket) => {
 
 
   socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
-    console.log('throwing hook');
-    console.log('hooks', hooks);
+    // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
     if (pInfo.hooks.owned.size < 1) {
       hook_throw(socket.id, hookDir);
@@ -518,8 +529,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('reelhooks', () => {
+    // console.log('starting to reel')
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.reel_cooldown && pInfo.hooks.owned.size >= 1) {
+      // console.log('reeling');
       hook_reel(pInfo);
     }
   });
@@ -531,10 +544,12 @@ io.on('connection', (socket) => {
       hook_delete(hid);
     }
     // detach & pull in all hooks that are attached to player
+    console.log('attached', getAttached(socket.id));
     for (let hid of getAttached(socket.id)) {
-      hook_detach(hid, true);
-      hooks[hid].isResetting = true;
+      hook_detach(hid, false);
+      hook_reset_init(hid);
     }
+    console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
     socket.broadcast.emit('playerdisconnect', socket.id);
   });
@@ -565,7 +580,6 @@ const runGame = () => {
   player loc = !followHook? player.loc: hook.loc bounded by radius, after updating hook.locs
   hook loc = !vel? to.loc : hook.loc
   */
-  let followHookPlayers = new Set();
 
   for (let pid in players) {
     let pInfo = playersInfo[pid];
@@ -574,12 +588,10 @@ const runGame = () => {
     cooldown_decay(pInfo, dt);
     // boost decay & update velocity
     velocity_decay(pInfo, dt);
-    velocity_update(pInfo, p, pInfo.followHook);
+    velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location
-    if (!pInfo.followHook) {
+    if (!pInfo.hooks.followHook) {
       p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
-    } else {
-      followHookPlayers.add(pid);
     }
   }
 
@@ -592,7 +604,7 @@ const runGame = () => {
     //if too far, start resetting
     else if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hook_detach(hid, true);
-      hooks[hid].isResetting = true;
+      hook_reset_init(hid);
     }
     else {
       //check for collisions
@@ -611,17 +623,22 @@ const runGame = () => {
         }
       }
     }
-
-    //if too far, reset hook
+    //reset hook
     if (h.isResetting) {
       hook_reset_velocity_update(h);
     }
-
     // update hook location
     h.loc = h.vel ? vec.add(h.loc, vec.scalar(h.vel, dt)) : players[h.to].loc;
   }
 
 
+  for (let pid in players) {
+    let pInfo = playersInfo[pid];
+    let p = players[pid];
+    if (pInfo.hooks.followHook) {
+      p.loc = hooks[pInfo.hooks.followHook].loc;
+    }
+  }
 
 
   io.emit('serverimage', players, hooks, world);
