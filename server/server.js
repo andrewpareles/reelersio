@@ -29,6 +29,12 @@ const d0 = 1 / (.5 * 16);
 //TODO: disconnect bug / coloring bug
 //TODO: reset hook (client side send click/button dir instead of action (eg throwhook = bad, click = good))
 //TODO: efficiencies, add redundancy in data structures (get rid of loop in hook-hook check with playersHooked object, etc)
+// TODOs:
+// - player hooking speed is slower
+// - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
+// - player hooked hookthrow speed is faster
+// - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
+
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
@@ -94,13 +100,15 @@ var hooks = {
 /*
 Hook invariants:
   - if you're hooked by someone and you hit them with your hook, both hooks disappear 
+  - when you reel, all hooks get reeled in and the reel cooldown starts
+  - when you throw hook, your velocity adds only if it boost it (not if it slows it)
+  - if attached, can't be resetting
+
   - player hooking speed is slower
   - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
   - player hooked hookthrow speed is faster
   - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
-  - when you reel, all hooks get reeled in and the reel cooldown starts
-  - when you throw hook, your velocity adds only if it boost it (not if it slows it)
-  - if attached, can't be resetting
+
   
   hooks[hid]: {
     from, // NEVER null
