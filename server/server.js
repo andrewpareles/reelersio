@@ -26,6 +26,8 @@ const d0 = 1 / (.5 * 16);
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
 //TODO: HOOK MULTIPLE PLAYERS
+//TODO: disconnect bug / coloring bug
+//TODO: reset hook (client side send click/button dir instead of action (eg throwhook = bad, click = good))
 
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
