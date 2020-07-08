@@ -379,28 +379,29 @@ var hook_reel = (pInfo) => {
   pInfo.hooks.reel_cooldown = reel_cooldown;
 }
 
-//detach hid from everyone it's hooking (must call this before hook_reset)
-var hook_detach = (hid, setWaitTillExit) => {
+var hook_detach_playersInfo = (hid) => {
   let h = hooks[hid];
-  if (h.to) {  //to & followHook
+  if (h.to) {
     getAttached(h.to).delete(hid);
     if (playersInfo[h.to].hooks.followHook === hid) {
       playersInfo[h.to].hooks.followHook = null;
     }
+  }
+}
+//detach hid from everyone it's hooking
+var hook_detach = (hid, setWaitTillExit) => {
+  let h = hooks[hid];
+  hook_detach_playersInfo(hid);
+  if (h.to) {  //to = null, and waitTillExit
     if (setWaitTillExit) h.waitTillExit.add(h.to);
     h.to = null;
   }
 }
 
 //updates velocity for when hook is in isResetting mode
-var hook_reset_velocity_update = (hid) => {
-  let h = hooks[hid];
+// it's a good idea to call hook_detach before running this...
+var hook_reset_velocity_update = (h) => {
   h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
-}
-
-var hook_reset_init = (hid) => {
-  h.isResetting = true;
-  hook_detach(hid, true);
 }
 
 //delete hook from hooks, from.owned, and to.attached, and followHook
@@ -409,12 +410,8 @@ var hook_delete = (hid) => {
   let h = hooks[hid];
   //delete from owned, attached, followHook, and hooks
   getOwned(h.from).delete(hid); //from (owned)
-  if (h.to) { //to (attached) & followHook (this could be replaced with hook_detach, but detach has a little more we don't need)
-    getAttached(h.to).delete(hid);
-    if (playersInfo[h.to].hooks.followHook === hid) {
-      playersInfo[h.to].hooks.followHook = null;
-    }
-  }
+  //to (attached) & followHook (this could be replaced with hook_detach, but detach has a little more we don't need)
+  hook_detach_playersInfo(hid);
   delete hooks[hid]; //hooks
   console.log('hooks after delete', hooks);
 }
@@ -536,7 +533,7 @@ io.on('connection', (socket) => {
     // detach & pull in all hooks that are attached to player
     for (let hid of getAttached(socket.id)) {
       hook_detach(hid, true);
-      hook_reset_init(hid);
+      hooks[hid].isResetting = true;
     }
     delete players[socket.id];
     socket.broadcast.emit('playerdisconnect', socket.id);
@@ -591,11 +588,12 @@ const runGame = () => {
     let h = hooks[hid];
     if (!h.vel) { //if the hook is following someone
       h.loc = players[h.to].loc;
-    } 
+    }
     //if too far, start resetting
     else if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
-      hook_reset_init(hid);
-    } 
+      hook_detach(hid, true);
+      hooks[hid].isResetting = true;
+    }
     else {
       //check for collisions
       for (let pid in players) {
@@ -616,7 +614,7 @@ const runGame = () => {
 
     //if too far, reset hook
     if (h.isResetting) {
-      hook_reset_velocity_update(hid);
+      hook_reset_velocity_update(h);
     }
 
     // update hook location
