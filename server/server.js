@@ -565,7 +565,6 @@ io.on('connection', (socket) => {
     }
     console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
-    socket.broadcast.emit('playerdisconnect', socket.id);
   });
 });
 

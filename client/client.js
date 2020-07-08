@@ -290,15 +290,6 @@ const serverImage = (serverPlayers, serverHooks, serverWorld) => {
 socket.on('serverimage', serverImage);
 
 
-const playerDisconnect = (playerid) => {
-  console.log("player left", playerid);
-  delete players[playerid];
-  console.log("players", players);
-}
-socket.on('playerdisconnect', playerDisconnect);
-
-
-
 socket.on('connect_error', (error) => {
   console.log("Connection error: " + JSON.stringify(error));
 });
