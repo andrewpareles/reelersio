@@ -28,7 +28,7 @@ const d0 = 1 / (.5 * 16);
 //TODO: HOOK MULTIPLE PLAYERS
 //TODO: disconnect bug / coloring bug
 //TODO: reset hook (client side send click/button dir instead of action (eg throwhook = bad, click = good))
-
+//TODO: efficiencies, add redundancy in data structures (get rid of loop in hook-hook check with playersHooked object, etc)
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
