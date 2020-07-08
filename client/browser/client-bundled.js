@@ -2212,7 +2212,7 @@ process.umask = function() { return 0; };
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'http://localhost:3001';
+const ADDRESS = 'http://192.168.1.204:3001';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
@@ -2498,15 +2498,6 @@ const serverImage = (serverPlayers, serverHooks, serverWorld) => {
   world = serverWorld;
 }
 socket.on('serverimage', serverImage);
-
-
-const playerDisconnect = (playerid) => {
-  console.log("player left", playerid);
-  delete players[playerid];
-  console.log("players", players);
-}
-socket.on('playerdisconnect', playerDisconnect);
-
 
 
 socket.on('connect_error', (error) => {
@@ -8800,7 +8791,7 @@ const dot = (a, b) => {
   return a.x * b.x + a.y * b.y;
 }
 
-const isCollided = (a, r_a, b, r_b) => {
+const isCollided = (a, b, r_a, r_b) => {
   return magnitude(add(a, negative(b))) < r_a + r_b
 }
 
@@ -8808,6 +8799,11 @@ const isCollided = (a, r_a, b, r_b) => {
 const sub = (a, b) => {
   return add(a, negative(b));
 }
+
+const average = (vecs) => {
+  return scalar(add(...vecs), 1 / vecs.length);
+}
+
 exports.vec = {
   add: add,
   scalar: scalar,
@@ -8819,6 +8815,7 @@ exports.vec = {
   dot: dot,
   isCollided: isCollided,
   sub: sub,
+  average: average,
 
 }
 

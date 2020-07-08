@@ -55,6 +55,11 @@ const isCollided = (a, b, r_a, r_b) => {
 const sub = (a, b) => {
   return add(a, negative(b));
 }
+
+const average = (vecs) => {
+  return scalar(add(...vecs), 1 / vecs.length);
+}
+
 exports.vec = {
   add: add,
   scalar: scalar,
@@ -66,5 +71,6 @@ exports.vec = {
   dot: dot,
   isCollided: isCollided,
   sub: sub,
+  average: average,
 
 }

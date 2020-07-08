@@ -25,8 +25,6 @@ const d0 = 1 / (.5 * 16);
 
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
-//TODO: HOOK MULTIPLE PLAYERS
-//TODO: disconnect bug / coloring bug
 //TODO: reset hook (client side send click/button dir instead of action (eg throwhook = bad, click = good))
 //TODO: efficiencies, add redundancy in data structures (get rid of loop in hook-hook check with playersHooked object, etc)
 // TODOs:
@@ -34,6 +32,8 @@ const d0 = 1 / (.5 * 16);
 // - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
 // - player hooked hookthrow speed is faster
 // - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
+// - reeling a player who's walking away is slower (or faster?) than usual
+// - when delete a hook, delete all hooks that landed on that player after it
 
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
@@ -75,9 +75,7 @@ var playersInfo = {
       },
 
       hooks: {
-        owned: new Set(), //hook ids originating from this player
-        attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
-        followHook: hid, //most recent attached hook to follow
+        see hook invariants
       }
     },
   */
@@ -87,11 +85,7 @@ var playersInfo = {
 var hooks = {
   /* 
   hid: {
-    from, 
-    to, 
-    loc,
-    vel,
-    isResetting,
+    see hook invariants
   }
   */
 }
@@ -103,18 +97,19 @@ Hook invariants:
   - when you reel, all hooks get reeled in and the reel cooldown starts
   - when you throw hook, your velocity adds only if it boost it (not if it slows it)
   - if attached, can't be resetting
+  - when attach, hook stops pulling
 
   - player hooking speed is slower
   - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
   - player hooked hookthrow speed is faster
   - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
+  - when attach to a new player, hook stops reeling and cooldown resets
 
-  
   hooks[hid]: {
     from, // NEVER null
-    to, // always the player the hook is latched onto (or null)
+    to, // always the players the hook is latched onto (or null)
     loc, // NEVER null
-    vel, // null iff !!to and not reeling anyone in, i.e. when just attached and following someone (when hook onto player and not the one reeling, lose velocity and track that player).
+    vel, // null iff to.size>0 and not reeling anyone in, i.e. when just attached and following someone (when hook onto player and not the one reeling, lose velocity and track that player).
     isResetting, //while true, reel in fast and always towards h.from, and can't reel (unless collides with player, then set to false). never isResetting if someone is attached ie !!to.
     waitTillExit: new Set(), //the players that this hook will ignore (not latch onto/disappear) (when the hook exits a player, it should remove that player)
   }
@@ -328,6 +323,16 @@ var getAttached = (pid_to) => {
   return playersInfo[pid_to].hooks.attached;
 }
 
+var getToAverage = (to_list) => {
+  let vecs = [];
+
+  for (let pid of to_list) {
+    vecs.push(players[pid].loc);
+  }
+  // console.log('to_average', vec.average(vecs));
+  return vec.average(vecs);
+}
+
 var generateHID = () => {
   let hid;
   do {
@@ -343,7 +348,7 @@ var createNewHook = (pid_from, hookDir) => {
   let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
   let hook = {
     from: pid_from,
-    to: null,
+    to: new Set(),
     loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
     vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
     isResetting: false,
@@ -363,56 +368,75 @@ var hook_throw = (pid_from, hookDir) => {
 
 
 var hook_attach = (pid_to, hid) => {
+  let h = hooks[hid];
   //update hooks[hid]'s to and player's attached
-  hooks[hid].to = pid_to;
-  hooks[hid].vel = null;
-  hooks[hid].isResetting = false;
+  //stop reeling people (but stay attached)
+  for (let to in h.to) {
+    if (playersInfo[to].hooks.followHook === hid) {
+      playersInfo[to].hooks.followHook = null;
+    }
+  }
+  h.vel = null;
+  h.to.add(pid_to);
+  h.isResetting = false;
   getAttached(pid_to).add(hid);
+  playersInfo[h.from].hooks.reel_cooldown = null;
 }
 
 
 var hook_reel = (pInfo) => {
+  console.log('\n\n')
+  console.log('players', playersInfo)
+  console.log('hooks', hooks)
   for (let hid of pInfo.hooks.owned) {
+    console.log('hid', hid);
     let h = hooks[hid];
     let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
     let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
     if (playerVel_projectedOn_reelDir < 0) playerVel_projectedOn_reelDir = 0;
 
     let hookVel;
-    if (h.to) {
-      hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
-      playersInfo[h.to].hooks.followHook = hid;
+    if (h.to.size != 0) {
+      console.log('top');
+      hookVel = vec.normalized(reelDir, (hookspeedreel_player + playerVel_projectedOn_reelDir) / h.to.size);
+      for (let p_reel of h.to) {
+        console.log('to', p_reel);
+        playersInfo[p_reel].hooks.followHook = hid;
+        //for all other hooks attached to player, start following the player
+        for (let hid2 of getAttached(p_reel)) hooks[hid2].vel = null;
+      }
     }
     else {
       hookVel = vec.normalized(reelDir, hookspeedreel_noplayer + playerVel_projectedOn_reelDir);
+      console.log('bottom');
     }
     h.vel = hookVel;
+    console.log('h.vel', h.vel);
   }
   pInfo.hooks.reel_cooldown = reel_cooldown;
 }
 
-var hook_detach_playersInfo = (hid) => {
+
+//if !deleteHookInfoToo, just detach information in playersInfo.
+var hook_detachAll = (hid, deleteHookInfoToo) => {
   let h = hooks[hid];
-  if (h.to) {
-    getAttached(h.to).delete(hid);
-    if (playersInfo[h.to].hooks.followHook === hid) {
-      playersInfo[h.to].hooks.followHook = null;
+  if (h.to.size !== 0) {
+    for (let to of h.to) {
+      getAttached(to).delete(hid);
+      if (playersInfo[to].hooks.followHook === hid) {
+        playersInfo[to].hooks.followHook = null;
+      }
+      if (deleteHookInfoToo)
+        h.waitTillExit.add(to);
     }
+    if (deleteHookInfoToo)
+      h.to.clear();
   }
   if (getOwned(h.from).size === 0)
     playersInfo[h.from].hooks.reel_cooldown = null;
 }
 
 
-//detach hid from everyone it's hooking
-var hook_detach = (hid, setWaitTillExit) => {
-  let h = hooks[hid];
-  hook_detach_playersInfo(hid);
-  if (h.to) {  //to = null, and waitTillExit
-    if (setWaitTillExit) h.waitTillExit.add(h.to);
-    h.to = null;
-  }
-}
 
 
 //delete hook from hooks, from.owned, and to.attached, and followHook
@@ -421,8 +445,8 @@ var hook_delete = (hid) => {
   let h = hooks[hid];
   //delete from owned, attached, followHook, and hooks
   getOwned(h.from).delete(hid); //from (owned)
-  //to (attached) & followHook (this could be replaced with hook_detach, but detach has a little more we don't need)
-  hook_detach_playersInfo(hid);
+  //to (attached) & followHook (dont care about hookinfo being deleted, since we're deleting the whole hook)
+  hook_detachAll(hid, false);
   delete hooks[hid]; //hooks
   // console.log('hooks after delete', hooks);
 }
@@ -434,7 +458,7 @@ var hook_reset_velocity_update = (h) => {
   h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
 }
 
-// should call hook_detach before running this...
+// should call hook_detachAll before running this...
 var hook_reset_init = (hid) => {
   let h = hooks[hid];
   h.isResetting = true;
@@ -466,7 +490,6 @@ const createNewPlayerAndInfo = (username) => {
     {// PLAYER:
       loc: generateStartingLocation(),
       vel: { x: 0, y: 0 },
-      followHook: null,
       username: username,
       color: generateRandomColor(),
     },
@@ -487,6 +510,7 @@ const createNewPlayerAndInfo = (username) => {
         owned: new Set(), //hook ids originating from this player
         attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
         reel_cooldown: 0,
+        followHook: null,
       }
     }
   ]
@@ -560,7 +584,7 @@ io.on('connection', (socket) => {
     // detach & pull in all hooks that are attached to player
     console.log('attached', getAttached(socket.id));
     for (let hid of getAttached(socket.id)) {
-      hook_detach(hid, false);
+      hook_detachAll(hid, true);
       hook_reset_init(hid);
     }
     console.log('attached\'', getAttached(socket.id));
@@ -608,15 +632,14 @@ const runGame = () => {
     }
   }
 
-
   for (let hid in hooks) {
     let h = hooks[hid];
     if (!h.vel) { //if the hook is following someone
-      h.loc = players[h.to].loc;
+      h.loc = getToAverage(h.to);
     }
     //if too far, start resetting
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
-      hook_detach(hid, true);
+      hook_detachAll(hid, true);
       hook_reset_init(hid);
     }
     else {
@@ -626,12 +649,12 @@ const runGame = () => {
           if (!h.waitTillExit.has(pid)) {
             if (pid === h.from) { //if the hook collided with its sender, delete it
               hook_delete(hid);
-            } else if (!h.to) { //if hook has no to
+            } else { //look for player to hook
               //if two players hook each other, delete both hooks
               let deleted = false;
               for (let hid2 of playersInfo[pid].hooks.owned) {
                 // if hooking someone with a hook to you, delete both hooks
-                if (h.from == hooks[hid2].to) {
+                if (hooks[hid2].to.has(h.from)) {
                   console.log('deleting')
                   hook_delete(hid);
                   hook_delete(hid2);
@@ -640,7 +663,10 @@ const runGame = () => {
                 }
               }
               if (!deleted)
-                hook_attach(pid, hid);
+                if (!h.to.has(pid)) {
+                  if (h.to.size < 2)
+                    hook_attach(pid, hid);
+                }
             }
           }
         } else { //player has exited hook, so remove it from waitTillExit
@@ -653,7 +679,7 @@ const runGame = () => {
       hook_reset_velocity_update(h);
     }
     // update hook location
-    h.loc = h.vel ? vec.add(h.loc, vec.scalar(h.vel, dt)) : players[h.to].loc;
+    h.loc = h.vel ? vec.add(h.loc, vec.scalar(h.vel, dt)) : getToAverage(h.to);
   }
 
 
@@ -664,6 +690,10 @@ const runGame = () => {
       p.loc = hooks[pInfo.hooks.followHook].loc;
     }
   }
+
+
+  // console.log("players:", players);
+  // console.log("hooks:", hooks);
 
 
   io.emit('serverimage', players, hooks, world);
