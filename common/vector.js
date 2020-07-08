@@ -47,7 +47,7 @@ const dot = (a, b) => {
   return a.x * b.x + a.y * b.y;
 }
 
-const isCollided = (a, r_a, b, r_b) => {
+const isCollided = (a, b, r_a, r_b) => {
   return magnitude(add(a, negative(b))) < r_a + r_b
 }
 
