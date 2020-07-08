@@ -242,7 +242,7 @@ var boost_updateOnPress = (pInfo, key) => {
     }
     // change boost direction
     else if (keyDirection_isOpposite(b, pInfo.boost.Key)) {
-      boostSet(pInfo, c, 1);
+      boostSet(pInfo, c, .5);
     }
   }
   else {
@@ -333,7 +333,7 @@ var createNewHook = (pid_from, hookDir) => {
   let hook = {
     from: pid_from,
     to: null,
-    loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius + hookRadius)),
+    loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
     vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
     isResetting: false,
     waitTillExit: new Set(),
@@ -362,7 +362,6 @@ var hook_attach = (pid_to, hid) => {
 
 var hook_reel = (pInfo) => {
   for (let hid of pInfo.hooks.owned) {
-    console.log('hid', hid);
     let h = hooks[hid];
     let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
     let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
@@ -370,7 +369,6 @@ var hook_reel = (pInfo) => {
 
     let hookVel;
     if (h.to) {
-      console.log('h.to', h.to);
       hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
       playersInfo[h.to].hooks.followHook = hid;
     }
@@ -390,7 +388,11 @@ var hook_detach_playersInfo = (hid) => {
       playersInfo[h.to].hooks.followHook = null;
     }
   }
+  if (getOwned(h.from).size === 0)
+    playersInfo[h.from].hooks.reel_cooldown = null;
 }
+
+
 //detach hid from everyone it's hooking
 var hook_detach = (hid, setWaitTillExit) => {
   let h = hooks[hid];
@@ -399,19 +401,6 @@ var hook_detach = (hid, setWaitTillExit) => {
     if (setWaitTillExit) h.waitTillExit.add(h.to);
     h.to = null;
   }
-}
-
-//updates velocity for when hook is in isResetting mode
-// should call hook_reset_init before running this...
-var hook_reset_velocity_update = (h) => {
-  h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
-}
-
-// should call hook_detach before running this...
-var hook_reset_init = (hid) => {
-  let h = hooks[hid];
-  h.isResetting = true;
-  hook_reset_velocity_update(h);
 }
 
 
@@ -425,6 +414,20 @@ var hook_delete = (hid) => {
   hook_detach_playersInfo(hid);
   delete hooks[hid]; //hooks
   // console.log('hooks after delete', hooks);
+}
+
+
+//updates velocity for when hook is in isResetting mode
+// should call hook_reset_init before running this...
+var hook_reset_velocity_update = (h) => {
+  h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
+}
+
+// should call hook_detach before running this...
+var hook_reset_init = (hid) => {
+  let h = hooks[hid];
+  h.isResetting = true;
+  hook_reset_velocity_update(h);
 }
 
 
@@ -602,23 +605,35 @@ const runGame = () => {
       h.loc = players[h.to].loc;
     }
     //if too far, start resetting
-    else if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
+    if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hook_detach(hid, true);
       hook_reset_init(hid);
     }
     else {
       //check for collisions
       for (let pid in players) {
-        let p = players[pid];
-        if (vec.isCollided(p.loc, h.loc, playerRadius, hookRadius)) {
+        if (vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
           if (!h.waitTillExit.has(pid)) {
             if (pid === h.from) { //if the hook collided with its sender, delete it
               hook_delete(hid);
-            } else if (!h.to) { //attach it
-              hook_attach(pid, hid);
+            } else if (!h.to) { //if hook has no to
+              //if two players hook each other, delete both hooks
+              let deleted = false;
+              for (let hid2 of playersInfo[pid].hooks.owned) {
+                // if hooking someone with a hook to you, delete both hooks
+                if (h.from == hooks[hid2].to) {
+                  console.log('deleting')
+                  hook_delete(hid);
+                  hook_delete(hid2);
+                  deleted = true;
+                  break;
+                }
+              }
+              if (!deleted)
+                hook_attach(pid, hid);
             }
           }
-        } else { //player just exited hook, so remove it from waitTillExit
+        } else { //player has exited hook, so remove it from waitTillExit
           h.waitTillExit.delete(pid);
         }
       }
