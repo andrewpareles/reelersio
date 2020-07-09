@@ -1,12 +1,10 @@
 //https://socket.io/docs/server-api/
 const express = require('express');
 const PORT = process.env.PORT || 3001;
-const INDEX = '../client/browser/index.html';
-
+const INDEX = '/public/index.html'; 
 
 const server = express()
   .use(express.static('public'))
-  .get('*', (req, res) => res.sendFile(INDEX, { root: __dirname }))
   .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
   .listen(PORT, function () {
     console.log(`listening on *:${PORT}`);

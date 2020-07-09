@@ -4,11 +4,12 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "npm install browserify && cd client/ && npm run compile && cd ../ && node server/server.js"
+    "start": "cd client/ && npm run compile && cd ../server && npm run start"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "browserify": "^16.5.1",
     "express": "^4.17.1",
     "socket.io": "^2.2.0"
   }

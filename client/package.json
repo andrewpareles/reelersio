@@ -2,14 +2,13 @@
   "name": "client",
   "version": "1.0.0",
   "description": "",
-  "main": "client.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "compile": "browserify client.js -o browser/client-bundled.js && cp game.html browser/game.html && cp clientcss.css browser/clientcss-bundled.css"
-    },
+    "compile": "browserify client.js -o ../server/public/client-bundled.js && cp game.html ../server/public/index.html && cp clientcss.css ../server/public/clientcss-bundled.css"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "browserify": "^16.5.1",
     "dgram": "^1.0.1",
     "socket.io": "^2.3.0",
     "socket.io-client": "^2.2.0"
