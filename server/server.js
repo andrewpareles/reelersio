@@ -1,6 +1,6 @@
 //https://socket.io/docs/server-api/
 const server = require('http').Server();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const INDEX = '../client/browser/index.html';
 
 
