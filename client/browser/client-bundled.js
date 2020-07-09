@@ -2212,7 +2212,7 @@ process.umask = function() { return 0; };
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'http://192.168.1.204:3001';
+const ADDRESS = 'https://trussbucket.herokuapp.com/:3001';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
@@ -2363,7 +2363,6 @@ const canv_top = canvas.getBoundingClientRect().top;
 const canv_left = canvas.getBoundingClientRect().left;
 
 var c = canvas.getContext("2d");
-
 var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
 
