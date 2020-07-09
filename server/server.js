@@ -3,17 +3,16 @@ const server = require('http').Server();
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const playerRadius = 20; //pix
+const playerRadius = 20*1.5; //pix
 const walkspeed = 124 / 1000; // pix/ms
-const walkspeed_hooked = 24 / 1000; // pix/ms
+const walkspeed_hooked = 124 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
 
 const hookspeed = 200 / 1000;
 const hookspeed_reset = 500 / 1000;
-const hookspeedreel_player = 80 / 1000;
-const hookspeedreel_noplayer = 300 / 1000;
+const hookspeedreel = 80 / 1000;
 const reel_cooldown = 1 * 1000;
-const followHook_radius = 10;
+const followHook_radius = playerRadius;
 
 
 const a0 = 1 / (160 * 16); // boost decay v^2 term
@@ -36,12 +35,14 @@ const d0 = 1 / (.5 * 16);
 // - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
 // - reeling a player who's walking away is slower (or faster?) than usual
 // - when delete a hook, delete all hooks that landed on that player after it
+// pulls only last 1 sec
+// hooks are centered on player
 
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
 
-const WAIT_TIME = 16; // # ms to wait to broadcast players object
+const WAIT_TIME = 33; // # ms to wait to broadcast players object
 
 
 
@@ -370,22 +371,20 @@ var hook_attach = (pid_to, hid) => {
 var hook_reel = (pInfo) => {
   for (let hid of pInfo.hooks.owned) {
     let h = hooks[hid];
-    let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
-    let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
-    if (playerVel_projectedOn_reelDir < 0) playerVel_projectedOn_reelDir = 0;
-
-    let hookVel;
     if (h.to) {
-      hookVel = vec.normalized(reelDir, hookspeedreel_player + playerVel_projectedOn_reelDir);
+      let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
+      let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
+      let reelSpeed = playerVel_projectedOn_reelDir > hookspeedreel ? playerVel_projectedOn_reelDir : hookspeedreel;
+      let hookVel = vec.normalized(reelDir, reelSpeed);
       playersInfo[h.to].hooks.followHook = hid;
       //for all other hooks attached to player, start following the player
       for (let hid2 of getAttached(h.to)) hooks[hid2].vel = null;
-
+      h.vel = hookVel;
     }
     else {
-      hookVel = vec.normalized(reelDir, hookspeedreel_noplayer + playerVel_projectedOn_reelDir);
+      hook_detach(hid, true);
+      hook_reset_init(hid);
     }
-    h.vel = hookVel;
   }
   pInfo.hooks.reel_cooldown = reel_cooldown;
 }
@@ -602,17 +601,12 @@ const runGame = () => {
     velocity_decay(pInfo, dt);
     velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location
-    if (!pInfo.hooks.followHook) {
-      p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
-    }
+    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
   }
 
 
   for (let hid in hooks) {
     let h = hooks[hid];
-    if (!h.vel) { //if the hook is following someone
-      h.loc = players[h.to].loc;
-    }
     //if too far, start resetting
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hook_detach(hid, true);
@@ -651,19 +645,31 @@ const runGame = () => {
     if (h.isResetting) {
       hook_reset_velocity_update(h);
     }
-    // update hook location
-    h.loc = h.vel ? vec.add(h.loc, vec.scalar(h.vel, dt)) : players[h.to].loc;
+    // update hook location if it's not tracking someone
+    if (h.vel)
+      h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
   }
 
 
   for (let pid in players) {
+    // update players confined to hook radius
     let pInfo = playersInfo[pid];
-    let p = players[pid];
     if (pInfo.hooks.followHook) {
-      p.loc = hooks[pInfo.hooks.followHook].loc;
+    let p = players[pid];
+      let h = hooks[pInfo.hooks.followHook];
+      let htop = vec.sub(p.loc, h.loc);
+      if (vec.magnitude(htop) > followHook_radius){
+        p.loc = vec.add(h.loc, vec.normalized(htop, followHook_radius));
+      }
     }
   }
 
+  for (let hid in hooks) {
+    // update hooks confined to player
+    let h = hooks[hid];
+    if (!h.vel)
+      h.loc = players[h.to].loc;
+  }
 
   io.emit('serverimage', players, hooks, world);
 }

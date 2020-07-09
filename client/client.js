@@ -153,7 +153,6 @@ const canv_top = canvas.getBoundingClientRect().top;
 const canv_left = canvas.getBoundingClientRect().left;
 
 var c = canvas.getContext("2d");
-
 var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
 
