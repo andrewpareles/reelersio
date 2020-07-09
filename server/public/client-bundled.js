@@ -4,6 +4,7 @@ const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
 const ADDRESS = 'https://trussbucket.herokuapp.com/';
+// const ADDRESS = 'http://192.168.1.204:3001';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */

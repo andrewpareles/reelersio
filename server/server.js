@@ -1,7 +1,7 @@
 //https://socket.io/docs/server-api/
 const express = require('express');
 const PORT = process.env.PORT || 3001;
-const INDEX = '/public/index.html'; 
+const INDEX = '/public/index.html';
 
 const server = express()
   .use(express.static('public'))
@@ -47,12 +47,16 @@ const d0 = 1 / (.5 * 16);
 // - when delete a hook, delete all hooks that landed on that player after it
 // pulls only last 1 sec
 // hooks are centered on player
+// if player is beeing reeled, their velocity should reflect that
+// if throw then reel immediately, hook should disappear
+// - map stuff
+
 
 const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
 
-const WAIT_TIME = 16; // # ms to wait to broadcast players object
+const WAIT_TIME = 8; // # ms to wait to broadcast players object
 
 
 
@@ -508,6 +512,8 @@ io.on('connection', (socket) => {
   //set what server does on different events
   socket.on('join', (username, callback) => {
     let [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username);
+    if (players[socket.id]) console.error('player already exists when joining', socket.id)
+    if (playersInfo[socket.id]) console.error('playersInfo already exists when joining', socket.id)
     players[socket.id] = newPlayer;
     playersInfo[socket.id] = newPlayerInfo;
     callback(
@@ -562,17 +568,23 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', (reason) => {
     // delete all hooks that were from player
+    if (!playersInfo[socket.id]) {
+      console.error('player disconnect error:', socket.id);
+      console.log('hooks', hooks);
+    }
+
     for (let hid of getOwned(socket.id)) {
       hook_delete(hid);
     }
     // detach & pull in all hooks that are attached to player
-    console.log('attached', getAttached(socket.id));
+    // console.log('attached', getAttached(socket.id));
     for (let hid of getAttached(socket.id)) {
       hook_detach(hid, false);
       hook_reset_init(hid);
     }
-    console.log('attached\'', getAttached(socket.id));
+    // console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
+    delete playersInfo[socket.id];
   });
 });
 
@@ -592,11 +604,6 @@ const runGame = () => {
   let dt = Date.now() - prevtime;
   prevtime = Date.now();
   // console.log("dt:", dt);
-
-  /*
-  player loc = !followHook? player.loc: hook.loc bounded by radius, after updating hook.locs
-  hook loc = !vel? to.loc : hook.loc
-  */
 
   for (let pid in players) {
     let pInfo = playersInfo[pid];
