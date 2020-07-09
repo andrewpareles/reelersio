@@ -1,13 +1,19 @@
 //https://socket.io/docs/server-api/
 const server = require('http').Server();
-server.listen(3001, function () {
-  console.log('listening on *:3001');
-});
+const PORT = process.env.PORT || 3000;
+const INDEX = '../client/browser/index.html';
+
+
+server
+  .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
+  .listen(PORT, function () {
+    console.log('listening on *:3001');
+  });
 
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const playerRadius = 20*1.5; //pix
+const playerRadius = 20 * 1.5; //pix
 const walkspeed = 124 / 1000; // pix/ms
 const walkspeed_hooked = 124 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
@@ -655,10 +661,10 @@ const runGame = () => {
     // update players confined to hook radius
     let pInfo = playersInfo[pid];
     if (pInfo.hooks.followHook) {
-    let p = players[pid];
+      let p = players[pid];
       let h = hooks[pInfo.hooks.followHook];
       let htop = vec.sub(p.loc, h.loc);
-      if (vec.magnitude(htop) > followHook_radius){
+      if (vec.magnitude(htop) > followHook_radius) {
         p.loc = vec.add(h.loc, vec.normalized(htop, followHook_radius));
       }
     }
