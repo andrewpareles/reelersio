@@ -5,6 +5,7 @@ const INDEX = '../client/browser/index.html';
 
 
 const server = express()
+  .use(express.static('public'))
   .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
   .listen(PORT, function () {
     console.log(`listening on *:${PORT}`);
