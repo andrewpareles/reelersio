@@ -1,10 +1,10 @@
 //https://socket.io/docs/server-api/
-const server = require('http').Server();
+const express = require('express');
 const PORT = process.env.PORT || 3001;
 const INDEX = '../client/browser/index.html';
 
 
-server
+const server = express()
   .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
   .listen(PORT, function () {
     console.log('listening on *:3001');
