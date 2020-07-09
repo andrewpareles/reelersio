@@ -1,5 +1,9 @@
 //https://socket.io/docs/server-api/
 const server = require('http').Server();
+server.listen(3001, function () {
+  console.log('listening on *:3001');
+});
+
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
@@ -42,7 +46,7 @@ const boostMultEffective_max = 2.5;
 const boostMult_max = 3;
 const hookCutoffDistance = 500;
 
-const WAIT_TIME = 33; // # ms to wait to broadcast players object
+const WAIT_TIME = 16; // # ms to wait to broadcast players object
 
 
 
@@ -568,10 +572,6 @@ io.on('connection', (socket) => {
 
 
 
-
-server.listen(process.env.PORT || 3000, function () {
-  console.log('listening on *:3000');
-});
 
 
 
