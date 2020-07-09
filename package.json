@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "cd client/ && npm run compile && cd ../ && node server/server.js"
+    "start": "npm install browserify && cd client/ && npm run compile && cd ../ && node server/server.js"
   },
   "author": "",
   "license": "ISC",
