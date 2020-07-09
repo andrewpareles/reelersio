@@ -7,7 +7,7 @@ const INDEX = '../client/browser/index.html';
 const server = express()
   .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
   .listen(PORT, function () {
-    console.log('listening on *:3001');
+    console.log(`listening on *:${PORT}`);
   });
 
 const io = require('socket.io')(server);
