@@ -6,6 +6,9 @@
   "scripts": {
     "start": "cd client/ && npm run compile && cd ../server && npm run start"
   },
+  "engines": {
+    "node": "12.x"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
