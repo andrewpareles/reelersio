@@ -36,12 +36,6 @@ const getWaitForExecutionPair = (callback) => {
   return [new_fn, promise];
 };
 
-
-var sent = {
-  vel: null,
-
-}
-
 var send = {
   // sent when you join the game:
   join: async (callback) => {
@@ -61,6 +55,9 @@ var send = {
   rightclick: () => {
     socket.emit('rightclick');
   },
+  resethooks: () => {
+    socket.emit('resethooks');
+  },
 }
 
 
@@ -71,6 +68,10 @@ var keyDirections = {
   's': "down",
   'a': "left",
   'd': "right"
+}
+var keyActions = {
+  'r': "resethooks",
+  '/': "chat"
 }
 
 
@@ -214,9 +215,19 @@ document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
   if (keysPressedLocal.has(key)) return;
   keysPressedLocal.add(key);
-  let movementDir = keyDirections[key];
-  if (movementDir) { //ie WASD was pressed, not some other key
+
+  if (keyDirections[key]) { //ie WASD was pressed, not some other key
+    let movementDir = keyDirections[key];
     send.goindirection(movementDir);
+
+  } else if (keyActions[key]) {
+    let actionKey = keyActions[key];
+    switch (actionKey) {
+      case "resethooks":
+        send.resethooks();
+        break;
+    }
+
   }
 });
 
@@ -224,8 +235,9 @@ document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
   if (!keysPressedLocal.has(key)) return;
   keysPressedLocal.delete(key);
-  let movementDir = keyDirections[key];
-  if (movementDir) {
+
+  if (keyDirections[key]) {
+    let movementDir = keyDirections[key];
     send.stopindirection(movementDir);
   }
 });

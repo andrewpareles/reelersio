@@ -572,9 +572,6 @@ io.on('connection', (socket) => {
     let pInfo = playersInfo[socket.id];
     if (pInfo.hooks.owned.size < maxHooksOut) {
       hook_throw(socket.id, hookDir);
-    } else {
-      for (let hid of pInfo.hooks.owned)
-        hook_reset_init(hid, true);
     }
   });
 
@@ -585,6 +582,13 @@ io.on('connection', (socket) => {
       // console.log('reeling');
       hook_reel(pInfo);
     }
+  });
+
+
+  socket.on('resethooks', () => {
+    let pInfo = playersInfo[socket.id];
+    for (let hid of pInfo.hooks.owned)
+      hook_reset_init(hid, true);
   });
 
 
@@ -642,23 +646,23 @@ const runGame = () => {
 
   for (let hid in hooks) {
     let h = hooks[hid];
-    //if too far, start resetting
+    // --- HANDLE COLLISIONS ---
+    //if outside cutoff range, start resetting
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hook_reset_init(hid, true);
-    }
-    else {
-      //check for collisions
+    } else {
       for (let pid in players) { //pid = player to be hooked
+        //player has exited hook, so remove it from waitTillExit
         if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
-          //player has exited hook, so remove it from waitTillExit
           h.waitTillExit.delete(pid);
         }
         // if colliding and not in waitTillExit
         else if (!h.waitTillExit.has(pid)) {
-          if (pid === h.from) { //if the hook collided with its sender, delete it
-            console.log('deleting');
+          //if player colliding with their own hook, delete
+          if (pid === h.from) {
             hook_delete(hid);
-          } else if (!h.to) { //if hook has no to, then treat as if it's about to hook someone
+          }
+          else if (!h.to) { //if hook has no to, then treat as if it's about to hook someone
             // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
             if (getHookedBy(pid).has(h.from)) {
               hook_reset_init(hid, true);
@@ -675,14 +679,21 @@ const runGame = () => {
           }
         }
       } //end for (players)
+    }// end if (cutoff range)
+    // --- PROCESS RESULTS OF COLLISION ---
+    //if the hook collided with its sender, delete it
+    if (h.from === h.to) {
+      console.log('deleting');
+      hook_delete(hid);
+    } else {
+      //reset hook
+      if (h.isResetting) {
+        hook_reset_velocity_update(h);
+      }
+      // update hook location if it's not tracking someone
+      if (h.vel)
+        h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
     }
-    //reset hook
-    if (h.isResetting) {
-      hook_reset_velocity_update(h);
-    }
-    // update hook location if it's not tracking someone
-    if (h.vel)
-      h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
   }
 
 
