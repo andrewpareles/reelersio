@@ -375,52 +375,56 @@ var createNewHook = (pid_from, hookDir) => {
 
 //detach hid from everyone it's hooking
 //deletePlayersInfoOnly = true only when the hook will be deleted immediately (so don't need to bother deleting hook info)
-// note if second argument is true then 3rd argument is discarded
-var detachHook = (hid, deletePlayersInfoOnly, setWaitTillExit) => {
+var detachHook = (hid, setWaitTillExit) => {
   let h = hooks[hid];
-  //delete playersInfo only right now:
-  if (h.to) {
-    getAttached(h.to).delete(hid);
-    if (playersInfo[h.to].hooks.followHook === hid) {
-      playersInfo[h.to].hooks.followHook = null;
+  console.log('hid', hid);
+  console.log('h', h);
+  let to = h.to, from = h.from;
+  //delete playersInfo of h.to:
+  if (to) {
+    h.to = null;
+
+    getAttached(to).delete(hid);
+    if (playersInfo[to].hooks.followHook === hid) {
+      playersInfo[to].hooks.followHook = null;
     }
-    getHookedBy(h.to).delete(h.from);
-    getAttachedTo(h.from).delete(h.to);
+    getHookedBy(to).delete(from);
+
+    // delete playersInfo of h.from:
+    getAttachedTo(from).delete(to);
+    if (setWaitTillExit) h.waitTillExit.add(to);
   }
   if (getOwned(h.from).size === 0)
     playersInfo[h.from].hooks.reel_cooldown = null;
-
-
-  // if deleting more than that, ...
-  if (!deletePlayersInfoOnly)
-    if (h.to) {  //to = null, and waitTillExit
-      if (setWaitTillExit) h.waitTillExit.add(h.to);
-      h.to = null;
-    }
 }
 
 
 var hook_throw = (pid_from, hookDir) => {
+  console.log('throwing hook');
   let [hid, hook] = createNewHook(pid_from, hookDir);
   hooks[hid] = hook;
   hook.waitTillExit.add(pid_from);
   getOwned(pid_from).add(hid);
+  console.log('hooks', hooks);
 }
 
 //attach hook hid to player pid_to
 var hook_attach = (hid, pid_to) => {
   //update hooks[hid]'s to and player's attached
+  console.log('hid', hid);
   hooks[hid].to = pid_to;
   hooks[hid].vel = null;
   hooks[hid].isResetting = false;
   getAttached(pid_to).add(hid);
   getHookedBy(pid_to).add(hooks[hid].from);
   getAttachedTo(hooks[hid].from).add(pid_to);
+  console.log('hooks', hooks);
 }
 
 
-var hook_reel = (pInfo) => {
-  for (let hid of pInfo.hooks.owned) {
+var hook_reelAllOwned = (pid) => {
+  console.log('reeling')
+  for (let hid of getOwned(pid)) {
     let h = hooks[hid];
     if (h.to) {
       let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
@@ -436,7 +440,8 @@ var hook_reel = (pInfo) => {
       hook_reset_init(hid, true);
     }
   }
-  pInfo.hooks.reel_cooldown = reel_cooldown;
+  playersInfo[pid].hooks.reel_cooldown = reel_cooldown;
+  console.log('hooks', hooks)
 }
 
 
@@ -448,8 +453,9 @@ var hook_delete = (hid) => {
   let h = hooks[hid];
   //delete from owned, attached, followHook, and hooks
   getOwned(h.from).delete(hid); //from (owned)
+  if (h.to) getAttached(h.to).delete(hid); //to (attached)
   //to (attached) & followHook 
-  detachHook(hid, true);
+  detachHook(hid, false);
   delete hooks[hid]; //hooks
   // console.log('hooks after delete', hooks);
 }
@@ -464,12 +470,29 @@ var hook_reset_velocity_update = (h) => {
 // no need to call hook_detach before running this!!
 var hook_reset_init = (hid, setWaitTillExit) => {
   // if calling this, not gonna be deleting the hook so 2nd arg is false:
-  detachHook(hid, false, setWaitTillExit);
+  detachHook(hid, setWaitTillExit);
   let h = hooks[hid];
   h.isResetting = true;
   hook_reset_velocity_update(h);
 }
 
+var hook_resetAllOwned = (pid, setWaitTillExit) => {
+  for (let hid of getOwned(pid)) {
+    hook_reset_init(hid, setWaitTillExit);
+  }
+}
+
+var hook_resetAllAttached = (pid, setWaitTillExit) => {
+  for (let hid of getAttached(pid)) {
+    hook_reset_init(hid, setWaitTillExit);
+  }
+}
+
+var hook_deleteAllOwned = (pid) => {
+  for (let hid of getOwned(socket.id)) {
+    hook_delete(hid);
+  }
+}
 
 var cooldown_decay = (pInfo, dt) => {
   if (pInfo.hooks.reel_cooldown) {
@@ -581,15 +604,13 @@ io.on('connection', (socket) => {
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.reel_cooldown && pInfo.hooks.owned.size >= 1) {
       // console.log('reeling');
-      hook_reel(pInfo);
+      hook_reelAllOwned(socket.id);
     }
   });
 
 
   socket.on('resethooks', () => {
-    let pInfo = playersInfo[socket.id];
-    for (let hid of pInfo.hooks.owned)
-      hook_reset_init(hid, true);
+    hook_resetAllOwned(socket.id, true);
   });
 
 
@@ -602,14 +623,10 @@ io.on('connection', (socket) => {
       console.log('hooks', hooks);
     }
 
-    for (let hid of getOwned(socket.id)) {
-      hook_delete(hid);
-    }
+    hook_deleteAllOwned(socket.id);
     // detach & pull in all hooks that are attached to player
     // console.log('attached', getAttached(socket.id));
-    for (let hid of getAttached(socket.id)) {
-      hook_reset_init(hid, false);
-    }
+    hook_resetAllAttached(socket.id, false);
     // console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
     delete playersInfo[socket.id];
@@ -625,7 +642,7 @@ io.on('connection', (socket) => {
 
 
 // ---------- RUN GAME (socket calls do the updating, this just runs it) ----------
-
+const hooksTakenCareOf = new Set();
 var prevtime = null;
 const runGame = () => {
   if (!prevtime) {
@@ -649,7 +666,6 @@ const runGame = () => {
       p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
   }
 
-
   for (let hid in hooks) {
     let h = hooks[hid];
     // --- HANDLE COLLISIONS ---
@@ -657,40 +673,50 @@ const runGame = () => {
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hook_reset_init(hid, true);
     } else {
+      hooksTakenCareOf.clear();
       for (let pid in players) { //pid = player to be hooked
         //player has exited hook, so remove it from waitTillExit
         if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
           h.waitTillExit.delete(pid);
+        }
+        //do nothing if this hook already had something done to it due to a collision
+        else if (hooksTakenCareOf.has(hid)) {
         }
         // if colliding and not in waitTillExit
         else if (!h.waitTillExit.has(pid)) {
           //if player colliding with their own hook, delete
           if (h.from === pid) {
             hook_delete(hid);
+            hooksTakenCareOf.add(hid);
           }
           //if hook has no to, then treat as if it's about to hook someone
           else if (!h.to) {
             // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
             if (getHookedBy(pid).has(h.from)) {
               hook_reset_init(hid, true);
+              hooksTakenCareOf.add(hid);
             }
             //if two players hook each other, delete both hooks
             else if (getAttachedTo(pid).has(h.from)) {
-              hook_delete(h.from);
-              hook_delete(hid);
+              // hook_delete(h.from);
+              hook_reset_init(hid, true);
+              hooksTakenCareOf.add(hid);
             }
             // otherwise, just attach the hook!
             else {
               hook_attach(hid, pid);
+              hooksTakenCareOf.add(hid);
             }
           }
         }
         //if colliding with sender and resetting, delete hook
         else if (h.isResetting && h.from === pid) {
           hook_delete(hid);
+          hooksTakenCareOf.add(hid);
         }
       } //end for (players)
     }// end if (cutoff range)
+
     // --- PROCESS RESULTS OF COLLISION ---
     //reset hook
     if (h.isResetting) {
@@ -699,8 +725,7 @@ const runGame = () => {
     // update hook location if it's not tracking someone
     if (h.vel)
       h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
-
-  }
+  } //end for (hooks)
 
 
   for (let pid in players) {
