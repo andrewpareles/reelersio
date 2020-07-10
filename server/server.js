@@ -22,7 +22,7 @@ const hookspeed = 200 / 1000;
 const hookspeed_reset = 500 / 1000;
 const hookspeedreel = 80 / 1000;
 const reel_cooldown = 1 * 1000;
-const maxHooksOut = 1; //per player
+const maxHooksOut = 2; //per player
 
 const a0 = 1 / (160 * 16); // boost decay v^2 term
 const b0 = 1 / (80 * 16); // boost decay constant term
