@@ -684,8 +684,9 @@ const runGame = () => {
               hook_attach(hid, pid);
             }
           }
-          //if colliding with sender and resetting, delete hook
-        } else if (h.isResetting && h.from === pid) {
+        }
+        //if colliding with sender and resetting, delete hook
+        else if (h.isResetting && h.from === pid) {
           hook_delete(hid);
         }
       } //end for (players)
