@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
@@ -224,6 +224,7 @@ document.addEventListener('keydown', function (event) {
     let actionKey = keyActions[key];
     switch (actionKey) {
       case "resethooks":
+        console.log('resethooks');
         send.resethooks();
         break;
     }

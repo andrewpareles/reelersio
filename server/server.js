@@ -527,6 +527,7 @@ const createNewPlayerAndInfo = (username) => {
 //if you want to understand the game, this is where to do it:
 // fired when client connects
 io.on('connection', (socket) => {
+  console.log("player joining");
 
   //set what server does on different events
   socket.on('join', (username, callback) => {
@@ -587,12 +588,15 @@ io.on('connection', (socket) => {
 
   socket.on('resethooks', () => {
     let pInfo = playersInfo[socket.id];
+    console.log('resetting hooks');
     for (let hid of pInfo.hooks.owned)
       hook_reset_init(hid, true);
   });
 
 
   socket.on('disconnect', (reason) => {
+    console.log("player disconnecting");
+
     // delete all hooks that were from player
     if (!playersInfo[socket.id]) {
       console.error('player disconnect error:', socket.id);
@@ -610,6 +614,9 @@ io.on('connection', (socket) => {
     // console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
     delete playersInfo[socket.id];
+
+    console.log("players:", players);
+    console.log("hooks:", hooks);
   });
 });
 
