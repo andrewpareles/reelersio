@@ -216,6 +216,8 @@ document.addEventListener('keydown', function (event) {
   if (keysPressedLocal.has(key)) return;
   keysPressedLocal.add(key);
 
+  // console.log('pressing', key);
+
   if (keyDirections[key]) { //ie WASD was pressed, not some other key
     let movementDir = keyDirections[key];
     send.goindirection(movementDir);
@@ -224,7 +226,6 @@ document.addEventListener('keydown', function (event) {
     let actionKey = keyActions[key];
     switch (actionKey) {
       case "resethooks":
-        console.log('resethooks');
         send.resethooks();
         break;
     }
@@ -236,6 +237,9 @@ document.addEventListener('keyup', function (event) {
   let key = event.key.toLowerCase();
   if (!keysPressedLocal.has(key)) return;
   keysPressedLocal.delete(key);
+
+  // console.log('releasing', key);
+
 
   if (keyDirections[key]) {
     let movementDir = keyDirections[key];

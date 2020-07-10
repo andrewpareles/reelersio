@@ -588,7 +588,6 @@ io.on('connection', (socket) => {
 
   socket.on('resethooks', () => {
     let pInfo = playersInfo[socket.id];
-    console.log('resetting hooks');
     for (let hid of pInfo.hooks.owned)
       hook_reset_init(hid, true);
   });
@@ -667,11 +666,10 @@ const runGame = () => {
         else if (!h.waitTillExit.has(pid)) {
           //if player colliding with their own hook, delete
           if (pid === h.from) {
-            console.log('deleting hook that collided with h.from');
             hook_delete(hid);
           }
           //if hook has no to, then treat as if it's about to hook someone
-          if (!h.to) {
+          else if (!h.to) {
             // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
             if (getHookedBy(pid).has(h.from)) {
               hook_reset_init(hid, true);
@@ -686,23 +684,21 @@ const runGame = () => {
               hook_attach(hid, pid);
             }
           }
+          //if colliding and resetting, delete hook
+        } else if (h.isResetting) {
+          hook_delete(hid);
         }
       } //end for (players)
     }// end if (cutoff range)
     // --- PROCESS RESULTS OF COLLISION ---
-    //if the hook collided with its sender, delete it
-    if (h.from === h.to) {
-      console.log('deleting');
-      hook_delete(hid);
-    } else {
-      //reset hook
-      if (h.isResetting) {
-        hook_reset_velocity_update(h);
-      }
-      // update hook location if it's not tracking someone
-      if (h.vel)
-        h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+    //reset hook
+    if (h.isResetting) {
+      hook_reset_velocity_update(h);
     }
+    // update hook location if it's not tracking someone
+    if (h.vel)
+      h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+
   }
 
 
