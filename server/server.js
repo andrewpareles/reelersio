@@ -667,9 +667,11 @@ const runGame = () => {
         else if (!h.waitTillExit.has(pid)) {
           //if player colliding with their own hook, delete
           if (pid === h.from) {
+            console.log('deleting hook that collided with h.from');
             hook_delete(hid);
           }
-          else if (!h.to) { //if hook has no to, then treat as if it's about to hook someone
+          //if hook has no to, then treat as if it's about to hook someone
+          if (!h.to) {
             // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
             if (getHookedBy(pid).has(h.from)) {
               hook_reset_init(hid, true);
