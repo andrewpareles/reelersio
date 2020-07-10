@@ -665,7 +665,7 @@ const runGame = () => {
         // if colliding and not in waitTillExit
         else if (!h.waitTillExit.has(pid)) {
           //if player colliding with their own hook, delete
-          if (pid === h.from) {
+          if (h.from === pid) {
             hook_delete(hid);
           }
           //if hook has no to, then treat as if it's about to hook someone
@@ -684,8 +684,8 @@ const runGame = () => {
               hook_attach(hid, pid);
             }
           }
-          //if colliding and resetting, delete hook
-        } else if (h.isResetting) {
+          //if colliding with sender and resetting, delete hook
+        } else if (h.isResetting && h.from === pid) {
           hook_delete(hid);
         }
       } //end for (players)
