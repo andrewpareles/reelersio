@@ -30,13 +30,13 @@ const d0 = 1 / (.5 * 16);
 // v0 = init boost vel, t = time since boost started
 
 // constant decay of reeling in player
-const b0h = 1 / (100 * 16);
-const c0h = 1 / (800 * 16); // c / (speedMult + d) term
-const d0h = 1 / (.0002 * 16);
+const b0h = 0 / (1000 * 16);
+const c0h = 1 / (30 * 16); // c / (speedMult + d) term
+const d0h = 1 / (.015 * 16);
 
 const hookspeedreel_min = 230 / 1000;
 const hookspeedreel_max = 280 / 1000;
-const reel_cooldown = .5 * 1000;
+const reel_cooldown = 1 * 1000;
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
 //TODO: HOOK MULTIPLE PLAYERS
