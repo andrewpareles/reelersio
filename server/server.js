@@ -13,7 +13,7 @@ const server = express()
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const playerRadius = 20 * 1.5; //pix
+const playerRadius = 30; //pix
 const walkspeed = 124 / 1000; // pix/ms
 const walkspeed_hooked = 124 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
@@ -22,8 +22,7 @@ const hookspeed = 200 / 1000;
 const hookspeed_reset = 500 / 1000;
 const hookspeedreel = 80 / 1000;
 const reel_cooldown = 1 * 1000;
-const followHook_radius = playerRadius;
-
+const maxHooksOut = 1; //per player
 
 const a0 = 1 / (160 * 16); // boost decay v^2 term
 const b0 = 1 / (80 * 16); // boost decay constant term
@@ -134,7 +133,9 @@ Hook invariants:
     owned: // contains every hook the person owns (typically 1)
     attached: // contains every hook being attached to this player
     followHook: //contains the most recent h.from hid that reeled this h.to player
-    reel_cooldown: null, //time left till can reel again (resets if all hooks come in)
+    reel_cooldown: null, //time left till can reel again (starts from top whenever reel, resets to null if all hooks come in)
+    hookedBy: // pids this player is hooked by (redundant info, makes stuff faster but info is already contained in attached)
+    attachedTo: // pids this player is hooking (redundant info, makes stuff faster but info is already contained in attached)
   }
 
   player loc = !followHook? player.loc: hook.loc bounded by radius, after updating hook.locs
@@ -338,6 +339,12 @@ var getOwned = (pid_from) => {
 var getAttached = (pid_to) => {
   return playersInfo[pid_to].hooks.attached;
 }
+var getHookedBy = (pid) => {
+  return playersInfo[pid].hooks.hookedBy;
+}
+var getAttachedTo = (pid) => {
+  return playersInfo[pid].hooks.attachedTo;
+}
 
 var generateHID = () => {
   let hid;
@@ -365,6 +372,34 @@ var createNewHook = (pid_from, hookDir) => {
 }
 
 
+
+//detach hid from everyone it's hooking
+//deletePlayersInfoOnly = true only when the hook will be deleted immediately (so don't need to bother deleting hook info)
+// note if second argument is true then 3rd argument is discarded
+var detachHook = (hid, deletePlayersInfoOnly, setWaitTillExit) => {
+  let h = hooks[hid];
+  //delete playersInfo only right now:
+  if (h.to) {
+    getAttached(h.to).delete(hid);
+    if (playersInfo[h.to].hooks.followHook === hid) {
+      playersInfo[h.to].hooks.followHook = null;
+    }
+    getHookedBy(h.to).delete(h.from);
+    getAttachedTo(h.from).delete(h.to);
+  }
+  if (getOwned(h.from).size === 0)
+    playersInfo[h.from].hooks.reel_cooldown = null;
+
+
+  // if deleting more than that, ...
+  if (!deletePlayersInfoOnly)
+    if (h.to) {  //to = null, and waitTillExit
+      if (setWaitTillExit) h.waitTillExit.add(h.to);
+      h.to = null;
+    }
+}
+
+
 var hook_throw = (pid_from, hookDir) => {
   let [hid, hook] = createNewHook(pid_from, hookDir);
   hooks[hid] = hook;
@@ -372,13 +407,15 @@ var hook_throw = (pid_from, hookDir) => {
   getOwned(pid_from).add(hid);
 }
 
-
-var hook_attach = (pid_to, hid) => {
+//attach hook hid to player pid_to
+var hook_attach = (hid, pid_to) => {
   //update hooks[hid]'s to and player's attached
   hooks[hid].to = pid_to;
   hooks[hid].vel = null;
   hooks[hid].isResetting = false;
   getAttached(pid_to).add(hid);
+  getHookedBy(pid_to).add(hooks[hid].from);
+  getAttachedTo(hooks[hid].from).add(pid_to);
 }
 
 
@@ -396,35 +433,13 @@ var hook_reel = (pInfo) => {
       h.vel = hookVel;
     }
     else {
-      hook_detach(hid, true);
-      hook_reset_init(hid);
+      hook_reset_init(hid, true);
     }
   }
   pInfo.hooks.reel_cooldown = reel_cooldown;
 }
 
-var hook_detach_playersInfo = (hid) => {
-  let h = hooks[hid];
-  if (h.to) {
-    getAttached(h.to).delete(hid);
-    if (playersInfo[h.to].hooks.followHook === hid) {
-      playersInfo[h.to].hooks.followHook = null;
-    }
-  }
-  if (getOwned(h.from).size === 0)
-    playersInfo[h.from].hooks.reel_cooldown = null;
-}
 
-
-//detach hid from everyone it's hooking
-var hook_detach = (hid, setWaitTillExit) => {
-  let h = hooks[hid];
-  hook_detach_playersInfo(hid);
-  if (h.to) {  //to = null, and waitTillExit
-    if (setWaitTillExit) h.waitTillExit.add(h.to);
-    h.to = null;
-  }
-}
 
 
 //delete hook from hooks, from.owned, and to.attached, and followHook
@@ -433,8 +448,8 @@ var hook_delete = (hid) => {
   let h = hooks[hid];
   //delete from owned, attached, followHook, and hooks
   getOwned(h.from).delete(hid); //from (owned)
-  //to (attached) & followHook (this could be replaced with hook_detach, but detach has a little more we don't need)
-  hook_detach_playersInfo(hid);
+  //to (attached) & followHook 
+  detachHook(hid, true);
   delete hooks[hid]; //hooks
   // console.log('hooks after delete', hooks);
 }
@@ -446,8 +461,10 @@ var hook_reset_velocity_update = (h) => {
   h.vel = vec.normalized(vec.sub(players[h.from].loc, h.loc), hookspeed_reset);
 }
 
-// should call hook_detach before running this...
-var hook_reset_init = (hid) => {
+// no need to call hook_detach before running this!!
+var hook_reset_init = (hid, setWaitTillExit) => {
+  // if calling this, not gonna be deleting the hook so 2nd arg is false:
+  detachHook(hid, false, setWaitTillExit);
   let h = hooks[hid];
   h.isResetting = true;
   hook_reset_velocity_update(h);
@@ -497,8 +514,10 @@ const createNewPlayerAndInfo = (username) => {
       hooks: {
         owned: new Set(), //hook ids originating from this player
         attached: new Set(), //list of hook ids attached to this player (NOT necessarily owned by this player)
-        reel_cooldown: 0,
         followHook: null,
+        reel_cooldown: null,
+        hookedBy: new Set(),
+        attachedTo: new Set(),
       }
     }
   ]
@@ -548,15 +567,18 @@ io.on('connection', (socket) => {
   });
 
 
-  socket.on('throwhook', (hookDir) => {// hookDir is {x, y}
+  socket.on('leftclick', (hookDir) => {// hookDir is {x, y}
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
-    if (pInfo.hooks.owned.size < 1) {
+    if (pInfo.hooks.owned.size < maxHooksOut) {
       hook_throw(socket.id, hookDir);
+    } else {
+      for (let hid of pInfo.hooks.owned)
+        hook_reset_init(hid, true);
     }
   });
 
-  socket.on('reelhooks', () => {
+  socket.on('rightclick', () => {
     // console.log('starting to reel')
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.reel_cooldown && pInfo.hooks.owned.size >= 1) {
@@ -579,8 +601,7 @@ io.on('connection', (socket) => {
     // detach & pull in all hooks that are attached to player
     // console.log('attached', getAttached(socket.id));
     for (let hid of getAttached(socket.id)) {
-      hook_detach(hid, false);
-      hook_reset_init(hid);
+      hook_reset_init(hid, false);
     }
     // console.log('attached\'', getAttached(socket.id));
     delete players[socket.id];
@@ -614,7 +635,8 @@ const runGame = () => {
     velocity_decay(pInfo, dt);
     velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location
-    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+    if (!pInfo.hooks.followHook)
+      p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
   }
 
 
@@ -622,37 +644,37 @@ const runGame = () => {
     let h = hooks[hid];
     //if too far, start resetting
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
-      hook_detach(hid, true);
-      hook_reset_init(hid);
+      hook_reset_init(hid, true);
     }
     else {
       //check for collisions
-      for (let pid in players) {
-        if (vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
-          if (!h.waitTillExit.has(pid)) {
-            if (pid === h.from) { //if the hook collided with its sender, delete it
-              hook_delete(hid);
-            } else if (!h.to) { //if hook has no to
-              //if two players hook each other, delete both hooks
-              let deleted = false;
-              for (let hid2 of playersInfo[pid].hooks.owned) {
-                // if hooking someone with a hook to you, delete both hooks
-                if (h.from == hooks[hid2].to) {
-                  console.log('deleting')
-                  hook_delete(hid);
-                  hook_delete(hid2);
-                  deleted = true;
-                  break;
-                }
-              }
-              if (!deleted)
-                hook_attach(pid, hid);
-            }
-          }
-        } else { //player has exited hook, so remove it from waitTillExit
+      for (let pid in players) { //pid = player to be hooked
+        if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
+          //player has exited hook, so remove it from waitTillExit
           h.waitTillExit.delete(pid);
         }
-      }
+        // if colliding and not in waitTillExit
+        else if (!h.waitTillExit.has(pid)) {
+          if (pid === h.from) { //if the hook collided with its sender, delete it
+            console.log('deleting');
+            hook_delete(hid);
+          } else if (!h.to) { //if hook has no to, then treat as if it's about to hook someone
+            // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
+            if (getHookedBy(pid).has(h.from)) {
+              hook_reset_init(hid, true);
+            }
+            //if two players hook each other, delete both hooks
+            else if (getAttachedTo(pid).has(h.from)) {
+              hook_delete(h.from);
+              hook_delete(hid);
+            }
+            // otherwise, just attach the hook!
+            else {
+              hook_attach(hid, pid);
+            }
+          }
+        }
+      } //end for (players)
     }
     //reset hook
     if (h.isResetting) {
@@ -671,8 +693,8 @@ const runGame = () => {
       let p = players[pid];
       let h = hooks[pInfo.hooks.followHook];
       let htop = vec.sub(p.loc, h.loc);
-      if (vec.magnitude(htop) > followHook_radius) {
-        p.loc = vec.add(h.loc, vec.normalized(htop, followHook_radius));
+      if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
+        p.loc = vec.add(h.loc, vec.normalized(htop, playerRadius));
       }
     }
   }

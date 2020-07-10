@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
 // const ADDRESS = 'http://192.168.1.204:3001';
+const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
@@ -55,11 +55,11 @@ var send = {
   stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
     socket.emit('stopindirection', direction);
   },
-  throwhook: (hookDir) => {
-    socket.emit('throwhook', hookDir);
+  leftclick: (hookDir) => {
+    socket.emit('leftclick', hookDir);
   },
-  reelhooks: () => {
-    socket.emit('reelhooks');
+  rightclick: () => {
+    socket.emit('rightclick');
   },
 }
 
@@ -237,11 +237,11 @@ document.addEventListener('mousedown', function (event) {
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
       let hookDir = vec.sub(mousePos, players[playerid].loc); //points from player to mouse
-      send.throwhook(hookDir);
+      send.leftclick(hookDir);
       break;
     //right click
     case 2:
-      send.reelhooks();
+      send.rightclick();
       break;
 
   }

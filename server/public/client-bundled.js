@@ -3,8 +3,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
-// const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
 const socket = io(ADDRESS);
 
 /** ---------- VECTOR FUNCTIONS ---------- */
@@ -56,11 +56,11 @@ var send = {
   stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
     socket.emit('stopindirection', direction);
   },
-  throwhook: (hookDir) => {
-    socket.emit('throwhook', hookDir);
+  leftclick: (hookDir) => {
+    socket.emit('leftclick', hookDir);
   },
-  reelhooks: () => {
-    socket.emit('reelhooks');
+  rightclick: () => {
+    socket.emit('rightclick');
   },
 }
 
@@ -238,11 +238,11 @@ document.addEventListener('mousedown', function (event) {
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
       let hookDir = vec.sub(mousePos, players[playerid].loc); //points from player to mouse
-      send.throwhook(hookDir);
+      send.leftclick(hookDir);
       break;
     //right click
     case 2:
-      send.reelhooks();
+      send.rightclick();
       break;
 
   }
@@ -8752,6 +8752,15 @@ const add = (...vecs) => {
   return { x: x, y: y };
 };
 
+const negative = (a) => {
+  return scalar(a, -1);
+};
+
+// a - b. a = to, b = from
+const sub = (a, b) => {
+  return add(a, negative(b));
+}
+
 // s*v, a is scalar, v is vector
 const scalar = (v, s) => {
   return { x: s * v.x, y: s * v.y };
@@ -8783,38 +8792,39 @@ const normalized = (a, mag) => {
   return norm == 0 ? { x: 0, y: 0 } : scalar(a, mag / norm);
 };
 
-const negative = (a) => {
-  return scalar(a, -1);
-};
-
 const dot = (a, b) => {
   return a.x * b.x + a.y * b.y;
 }
 
+// a = location of a, b = loc of b, r_a = radius of a, r_b = radius of b
 const isCollided = (a, b, r_a, r_b) => {
-  return magnitude(add(a, negative(b))) < r_a + r_b
+  return magnitude(sub(a, b)) < r_a + r_b;
 }
 
-// a - b. a = to, b = from
-const sub = (a, b) => {
-  return add(a, negative(b));
+// outside = location of outside object, r_out = radius of it
+// requires r_out > r_in
+const isContaining = (outside, inside, r_out, r_in) => {
+  return magnitude(sub(outside, inside)) < r_out - r_in;
 }
 
 const average = (vecs) => {
   return scalar(add(...vecs), 1 / vecs.length);
 }
 
+
+
 exports.vec = {
   add: add,
+  negative: negative,
+  sub: sub,
   scalar: scalar,
   magnitude: magnitude,
   equals: equals,
   nonzero: nonzero,
   normalized: normalized,
-  negative: negative,
   dot: dot,
   isCollided: isCollided,
-  sub: sub,
+  isContaining: isContaining,
   average: average,
 
 }
