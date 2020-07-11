@@ -32,7 +32,7 @@ const d0 = 1 / (.5 * 16);
 
 const hookspeed_reset = 500 / 1000;
 
-const hookspeed_max = 300 / 1000;
+const hookspeed_max = playerVel_max + 50 / 1000;
 const hookspeed_min = 200 / 1000;
 
 const hookspeedreel_min = 230 / 1000;
@@ -352,11 +352,13 @@ var velocity_update = (pInfo, p, followHook) => {
 var projectedVelocityInDirection = (pVel, motionDir, minspeed, maxspeed) => {
   motionDir = vec.normalized(motionDir);
   let playerVel_projectedOn_motionDir = vec.dot(pVel, motionDir);
-  let motionSpeed = vec.magnitude(pVel) + playerVel_projectedOn_motionDir;
+  let motionSpeed = playerVel_projectedOn_motionDir;
+  console.log('motionspeed, pVelMax', motionSpeed, playerVel_max);
   if (motionSpeed < 0) motionSpeed = 0;
   motionSpeed = minspeed + (motionSpeed / playerVel_max) * (maxspeed - minspeed);
 
-  // console.log('motionspeed', motionSpeed);
+  console.log('motionspeed', motionSpeed);
+  console.log('max, min', maxspeed, minspeed);
   return vec.normalized(motionDir, motionSpeed);
 }
 
