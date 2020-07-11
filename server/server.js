@@ -70,7 +70,8 @@ const d0h = 1 / (.015 * 16);
 // hooks follow players the same way players follwo hooks
 // string turns green when ready to reel
 // hook turns red if almost too far
-
+// world is sent once at beginning, callback does not do anything with players or hooks
+// hooks push you back
 
 const WAIT_TIME = 8; // # ms to wait to broadcast players object
 
@@ -161,10 +162,13 @@ Hook invariants:
  */
 
 var world = {
+  holes: {
+    sparta: {
+      loc: { x: 400, y: -400 },
+      radius: 150,
+      color: 'black',
+    }
 
-  sparta: {
-    center: { x: 500, y: 500 },
-    radius: 300,
   }
 };
 
@@ -361,12 +365,8 @@ var projectedVelocityInDirection = (pVel, motionDir, minspeed, maxspeed) => {
   motionDir = vec.normalized(motionDir);
   let playerVel_projectedOn_motionDir = vec.dot(pVel, motionDir);
   let motionSpeed = playerVel_projectedOn_motionDir;
-  console.log('motionspeed, pVelMax', motionSpeed, playerVel_max);
   if (motionSpeed < 0) motionSpeed = 0;
   motionSpeed = minspeed + (motionSpeed / playerVel_max) * (maxspeed - minspeed);
-
-  console.log('motionspeed', motionSpeed);
-  console.log('max, min', maxspeed, minspeed);
   return vec.normalized(motionDir, motionSpeed);
 }
 
@@ -571,7 +571,8 @@ var follow_cooldown_decay = (pInfo, dt) => {
 /** ---------- SOCKET CALLS & FUNCTIONS ---------- */
 
 const generateStartingLocation = () => {
-  return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
+  return { x: 20, y: 20 };
+  // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
 }
 
 const generateRandomColor = () => {
@@ -816,6 +817,38 @@ const runGame = () => {
       if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
         let ptoh = vec.sub(h.loc, p.loc);
         h.loc = vec.add(p.loc, vec.normalized(ptoh, playerRadius));
+      }
+    }
+  }
+
+
+  for (let hlid in world.holes) {
+    let hl = world.holes[hlid];
+    for (let pid in players) {
+      if (vec.isContaining(hl.loc, players[pid].loc, hl.radius, playerRadius)) {
+
+        //disconnect & reconnect, effectively
+        // DISCONNECT
+        if (!playersInfo[pid]) {
+          console.log("players:", players);
+          console.log("hooks:", hooks);
+
+          console.error('player disconnect error:', pid);
+          console.log('hooks', hooks);
+        }
+
+        hook_deleteAllOwned(pid);
+        // detach & pull in all hooks that are attached to player
+        // console.log('attached', getAttached(socket.id));
+        hook_resetAllAttached(pid, false);
+        // console.log('attached\'', getAttached(socket.id));
+        delete players[pid];
+        delete playersInfo[pid];
+        
+        //CONNECT
+        let [newPlayer, newPlayerInfo] = createNewPlayerAndInfo('respawned1');
+        players[pid] = newPlayer;
+        playersInfo[pid] = newPlayerInfo;
       }
     }
   }

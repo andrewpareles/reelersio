@@ -149,6 +149,21 @@ var drawHook = (h) => {
   c.stroke();
 }
 
+
+
+var drawHole = (q) => {
+  console.log(q);
+  let color = q.color;
+  let loc = q.loc;
+  let radius = q.radius;
+
+  c.beginPath();
+  c.lineWidth = radius;
+  c.strokeStyle = color;
+  c.arc(loc.x, -loc.y, radius - c.lineWidth / 2, 0, 2 * Math.PI);
+  c.stroke();
+}
+
 /** ---------- CANVAS / SCREEN CONSTANTS ---------- */
 var canvas = document.getElementById("canvas");
 const canv_top = canvas.getBoundingClientRect().top;
@@ -185,6 +200,11 @@ let newFrame = (timestamp) => {
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
+  for (let hlid in world.holes) {
+    let hl = world.holes[hlid];
+    drawHole(hl);
+  }
+
   for (let pid in players) {
     let p = players[pid];
     //update other players by interpolating velocity
@@ -196,6 +216,7 @@ let newFrame = (timestamp) => {
     let h = hooks[hid];
     drawHook(h);
   }
+
 
   window.requestAnimationFrame(newFrame);
 }
