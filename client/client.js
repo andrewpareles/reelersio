@@ -152,7 +152,6 @@ var drawHook = (h) => {
 
 
 var drawHole = (q) => {
-  console.log(q);
   let color = q.color;
   let loc = q.loc;
   let radius = q.radius;
