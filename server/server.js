@@ -18,35 +18,46 @@ const walkspeed = 124 / 1000; // pix/ms
 const walkspeed_hooked = 100 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
 
-const hookspeed = 300 / 1000;
-const hookspeed_reset = 500 / 1000;
-const maxHooksOut = 2; //per player
+const boostMultEffective_max = 2.5;
+const boostMult_max = 3;
+
+const playerVel_max = (1 + boostMultEffective_max) * walkspeed;
 
 const a0 = 1 / (160 * 16); // boost decay v^2 term
 const b0 = 1 / (80 * 16); // boost decay constant term
 const c0 = 1 / (37.5 * 16); // c / (boostMult + d) term
 const d0 = 1 / (.5 * 16);
-// Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
+// ^ Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
 // v0 = init boost vel, t = time since boost started
 
-// constant decay of reeling in player
-const b0h = 0 / (1000 * 16);
-const c0h = 1 / (30 * 16); // c / (speedMult + d) term
-const d0h = 1 / (.015 * 16);
+const hookspeed_reset = 500 / 1000;
+
+const hookspeed_max = 300 / 1000;
+const hookspeed_min = 200 / 1000;
 
 const hookspeedreel_min = 230 / 1000;
 const hookspeedreel_max = 280 / 1000;
 const reel_cooldown = 1 * 1000;
 
+const maxHooksOut = 2; //per player
+const hookCutoffDistance = 600;
+
+// constant decay of reeling in player
+const a0h = 0;
+const b0h = 0 / (1000 * 16);
+const c0h = 1 / (30 * 16); // c / (speedMult + d) term
+const d0h = 1 / (.015 * 16);
+
+
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
 //TODO: HOOK MULTIPLE PLAYERS
 //TODO: disconnect bug / coloring bug
-//TODO: reset hook (client side send click/button dir instead of action (eg throwhook = bad, click = good))
 //TODO: efficiencies, add redundancy in data structures (get rid of loop in hook-hook check with playersHooked object, etc)
 // TODOs:
 // - player hooking speed is slower
 // - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
 // - player hooked hookthrow speed is faster
+// - colors in hooks and players!!! fix colors, rendering etc
 // - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
 // - reeling a player who's walking away is slower (or faster?) than usual
 // - when delete a hook, delete all hooks that landed on that player after it
@@ -59,12 +70,8 @@ const reel_cooldown = 1 * 1000;
 // string turns green when ready to reel
 // hook turns red if almost too far
 
-const boostMultEffective_max = 2.5;
-const boostMult_max = 3;
-const hookCutoffDistance = 500;
 
 const WAIT_TIME = 8; // # ms to wait to broadcast players object
-
 
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
@@ -341,6 +348,18 @@ var velocity_update = (pInfo, p, followHook) => {
 
 
 /** ---------- HOOK FUNCTIONS ----------  */
+//velocity of player (pVel) projected onto motionDir
+var projectedVelocityInDirection = (pVel, motionDir, minspeed, maxspeed) => {
+  motionDir = vec.normalized(motionDir);
+  let playerVel_projectedOn_motionDir = vec.dot(pVel, motionDir);
+  let motionSpeed = vec.magnitude(pVel) + playerVel_projectedOn_motionDir;
+  if (motionSpeed < 0) motionSpeed = 0;
+  motionSpeed = minspeed + (motionSpeed / playerVel_max) * (maxspeed - minspeed);
+
+  // console.log('motionspeed', motionSpeed);
+  return vec.normalized(motionDir, motionSpeed);
+}
+
 var getOwned = (pid_from) => {
   return playersInfo[pid_from].hooks.owned;
 }
@@ -362,16 +381,16 @@ var generateHID = () => {
   return hid;
 }
 
+
 // returns [hook id, hook object]
-var createNewHook = (pid_from, hookDir) => {
+var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
-  hookDir = vec.normalized(hookDir);
-  let playerVel_projectedOn_hookDir = vec.dot(p.vel, hookDir);
+  let hookVel = projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
   let hook = {
     from: pid_from,
     to: null,
-    loc: vec.add(p.loc, vec.normalized(hookDir, playerRadius)),
-    vel: vec.normalized(hookDir, hookspeed + playerVel_projectedOn_hookDir),
+    loc: vec.add(p.loc, vec.normalized(throwDir, playerRadius)),
+    vel: hookVel,
     isResetting: false,
     waitTillExit: new Set(),
   };
@@ -388,13 +407,11 @@ var detachHook = (hid, setWaitTillExit) => {
   //delete playersInfo of h.to:
   if (to) {
     h.to = null;
-
     getAttached(to).delete(hid);
     if (playersInfo[to].hooks.followHook === hid) {
       playersInfo[to].hooks.followHook = null;
     }
     getHookedBy(to).delete(from);
-
     // delete playersInfo of h.from:
     getAttachedTo(from).delete(to);
     if (setWaitTillExit) h.waitTillExit.add(to);
@@ -406,10 +423,10 @@ var detachHook = (hid, setWaitTillExit) => {
 
 var hook_reel_decay = (h, dt) => {
   if (h.vel && h.to) {
-    let hSpeedMultiplier = vec.magnitude(h.vel) / hookspeed;
-    hSpeedMultiplier -= dt * (b0h + c0h / (hSpeedMultiplier + d0h));
+    let hSpeedMultiplier = vec.magnitude(h.vel) / hookspeed_max;
+    hSpeedMultiplier -= dt * (a0h * Math.pow(hSpeedMultiplier, 2) + b0h + c0h / (hSpeedMultiplier + d0h));
     if (hSpeedMultiplier <= 0) h.vel = null;
-    else h.vel = vec.normalized(h.vel, hSpeedMultiplier * hookspeed);
+    else h.vel = vec.normalized(h.vel, hSpeedMultiplier * hookspeed_max);
   }
 }
 
@@ -450,11 +467,8 @@ var hookReel = (pid) => {
   for (let hid of getOwned(pid)) {
     let h = hooks[hid];
     if (h.to) {
-      let reelDir = vec.normalized(vec.sub(players[h.from].loc, h.loc));
-      let playerVel_projectedOn_reelDir = vec.dot(players[h.from].vel, reelDir);
-      let reelSpeed = playerVel_projectedOn_reelDir > hookspeedreel_min ? playerVel_projectedOn_reelDir : hookspeedreel_min;
-      if (reelSpeed > hookspeedreel_max) reelSpeed = hookspeedreel_max;
-      let hookVel = vec.normalized(reelDir, reelSpeed);
+      let reelDir = vec.sub(players[h.from].loc, h.loc);
+      let hookVel = projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
       playersInfo[h.to].hooks.followHook = hid;
       //for all other hooks attached to player, start following the player
       for (let hid2 of getAttached(h.to)) hooks[hid2].vel = null;
@@ -640,6 +654,9 @@ io.on('connection', (socket) => {
 
     // delete all hooks that were from player
     if (!playersInfo[socket.id]) {
+      console.log("players:", players);
+      console.log("hooks:", hooks);
+
       console.error('player disconnect error:', socket.id);
       console.log('hooks', hooks);
     }
@@ -652,8 +669,6 @@ io.on('connection', (socket) => {
     delete players[socket.id];
     delete playersInfo[socket.id];
 
-    console.log("players:", players);
-    console.log("hooks:", hooks);
   });
 });
 
