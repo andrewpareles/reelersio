@@ -103,7 +103,7 @@ var drawPlayer = (p) => {
   let loc = p.loc;
 
   c.beginPath();
-  c.lineWidth = 6;//isLocalPlayer ? 4 : 2;
+  c.lineWidth = 6;
   c.strokeStyle = color;
   c.arc(loc.x, -loc.y, playerRadius - c.lineWidth / 2, 0, 2 * Math.PI);
   c.stroke();
