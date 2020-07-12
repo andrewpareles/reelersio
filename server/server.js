@@ -363,7 +363,7 @@ var boost_velocity_decay = (pInfo, dt) => {
 }
 
 //calculate velocity
-var velocity_update = (pInfo, p, followHook) => {
+var player_velocity_update = (pInfo, p, followHook) => {
   let speed = followHook ? walkspeed_hooked : walkspeed;
   let walk = vec.normalized(pInfo.walk.directionPressed, speed);
 
@@ -846,7 +846,7 @@ const runGame = () => {
     // boost decay & kb decay & update velocity
     boost_velocity_decay(pInfo, dt);
     if (pInfo.knockback.dir) knockback_timeout_decay(pInfo, dt);
-    velocity_update(pInfo, p, pInfo.hooks.followHook);
+    player_velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location (even if hooked, lets player walk within hook bubble)
     p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
     // update players confined to hook radius
