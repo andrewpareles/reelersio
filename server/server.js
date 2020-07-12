@@ -13,7 +13,7 @@ const server = express()
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const playerRadius = 30; //pix
+const playerRadius = 40; //pix
 const walkspeed = 124 / 1000; // pix/ms
 const walkspeed_hooked = 100 / 1000; // pix/ms
 const hookRadius = 10; //circle radius
@@ -30,20 +30,20 @@ const d0 = 1 / (.5 * 16);
 // ^ Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
 // v0 = init boost vel, t = time since boost started
 
-const hookspeed_reset = 500 / 1000;
+const hookspeed_reset = 800 / 1000;
 
 const hookspeed_max = playerVel_max + 50 / 1000;
 const hookspeed_min = 300 / 1000;
 const hookspeed_min_hooked = hookspeed_max;
 
-const hookspeedreel_min = 200 / 1000; //230 / 1000;
-const hookspeedreel_max = 350 / 1000; //280 / 1000;
-const reel_cooldown = 1.2 * 1000;
-const nofriction_timeout = .5 * 1000;
+const hookspeedreel_min = 220 / 1000; //230 / 1000;
+const hookspeedreel_max = 235 / 1000; //280 / 1000;
+const reel_cooldown = 1.7 * 1000;
+const nofriction_timeout = .25 * 1000;
 
-const kb_minspeed = 300 / 1000;
-const kb_maxspeed = 400 / 1000;
-const knockback_timeout = .25 * 1000;
+const kb_minspeed = 124 / 1000;
+const kb_maxspeed = 250 / 1000;
+const knockback_timeout = .3 * 1000;
 
 const maxHooksOut = 2; //per player
 const hookCutoffDistance = 600;
@@ -55,9 +55,9 @@ const c0h = 1 / (30 * 16); // c / (speedMult + d) term
 const d0h = 1 / (.015 * 16);
 
 //constant decay of knockback
-const a0k = a0h//1 / (160 * 16); 
-const b0k = b0h//1 / (80 * 16); 
-const c0k = c0h//1 / (37.5 * 16); 
+const a0k = 4 * a0h//1 / (160 * 16); 
+const b0k = 4 * b0h//1 / (80 * 16); 
+const c0k = 2 * c0h//1 / (37.5 * 16); 
 const d0k = d0h//1 / (.5 * 16);
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
@@ -117,6 +117,7 @@ var playersInfo = {
       },
       
       knockback: {
+        //all these are either defined appropriately or null
         speed: null, //kbSpeed
         dir: null, //NormalizedDir //null if no knockback
         timeremaining: null // timeout
@@ -379,15 +380,63 @@ var velocity_update = (pInfo, p, followHook) => {
   p.vel = ans;
 }
 
+/** ---------- KNOCKBACK FUNCTIONS ---------- */
+// pid of player being kb'd, hid of hook knocking back player
+var knockbackAdd = (hid, pid) => {
+  let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
+  // let throwPlayerToHook = vec.sub(hooks[hid].loc, players[hooks[hid].from].loc);
+  let mult = 1;//Math.abs(vec.dot(vec.normalized(hookToKbPlayer), vec.normalized(throwPlayerToHook)));
+  let kbVel = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, kb_minspeed, kb_maxspeed, hookspeed_max);
 
+  let pInfo = playersInfo[pid];
+  if (pInfo.knockback.dir) { //add onto previous kb
+    kbVel = vec.add(vec.normalized(pInfo.knockback.dir, pInfo.knockback.speed), kbVel);
+  }
+  pInfo.knockback.dir = vec.normalized(kbVel);
+  pInfo.knockback.speed = vec.magnitude(kbVel) * mult;
+  pInfo.knockback.timeremaining = knockback_timeout;
+}
+
+var knockbackReset = (pInfo) => {
+  pInfo.knockback.timeremaining = null;
+  pInfo.knockback.speed = null;
+  pInfo.knockback.dir = null;
+}
+
+// assumes knockback.vel (and knockback.speed, and timeremaining)
+var knockback_timeout_decay = (pInfo, dt) => {
+  // decrease cooldown
+  if (pInfo.knockback.timeremaining) {
+    pInfo.knockback.timeremaining -= dt;
+    if (pInfo.knockback.timeremaining <= 0) {
+      //decay with the leftover time:
+      dt = -pInfo.knockback.timeremaining;
+      pInfo.knockback.timeremaining = null;
+      if (dt === 0) return;
+    }
+    else return;
+  }
+  // decay player now that cooldown is over
+  let kbSpeed = pInfo.knockback.speed;
+  let dv = -dt * (a0k * Math.pow(kbSpeed, 2) + b0k + c0k / (kbSpeed + d0k));
+  kbSpeed += dv;
+  if (kbSpeed > 0) {
+    pInfo.knockback.speed = kbSpeed;
+  }
+  else {
+    //player stops following hook and hook starts following player
+    knockbackReset(pInfo);
+  }
+}
 /** ---------- HOOK FUNCTIONS ----------  */
-//velocity of player (pVel) projected onto motionDir
-var projectedVelocityInDirection = (pVel, motionDir, minspeed, maxspeed) => {
+// velocity of qVel projected onto motionDir, where qVelMax is the maximum possible qVel
+//eg with player, velocity of player (pVel) projected onto motionDir
+var projectedVelocityInDirection = (qVel, motionDir, minspeed, maxspeed, qVelMax = playerVel_max) => {
   motionDir = vec.normalized(motionDir);
-  let playerVel_projectedOn_motionDir = vec.dot(pVel, motionDir);
+  let playerVel_projectedOn_motionDir = vec.dot(qVel, motionDir);
   let motionSpeed = playerVel_projectedOn_motionDir;
   if (motionSpeed < 0) motionSpeed = 0;
-  motionSpeed = minspeed + (motionSpeed / playerVel_max) * (maxspeed - minspeed);
+  motionSpeed = minspeed + (motionSpeed / qVelMax) * (maxspeed - minspeed);
   return vec.normalized(motionDir, motionSpeed);
 }
 
@@ -471,11 +520,7 @@ var hookThrow = (pid_from, hookDir) => {
 //update hooks[hid]'s to and player's attached
 var hookAttach = (hid, pid_to) => {
   //knockback
-  let hookToPlayerDir = vec.sub(players[pid_to].loc, hooks[hid].loc);
-  let kbVec = projectedVelocityInDirection(hooks[hid].vel, hookToPlayerDir, kb_minspeed, kb_maxspeed);
-  playersInfo[pid_to].knockback.speed = vec.magnitude(kbVec);
-  playersInfo[pid_to].knockback.dir = vec.normalized(kbVec);
-  playersInfo[pid_to].knockback.timeremaining = knockback_timeout;
+  knockbackAdd(hid, pid_to);
   //attachment
   hooks[hid].to = pid_to;
   hooks[hid].vel = null;
@@ -483,6 +528,8 @@ var hookAttach = (hid, pid_to) => {
   getAttached(pid_to).add(hid);
   getHookedBy(pid_to).add(hooks[hid].from);
   getAttachedTo(hooks[hid].from).add(pid_to);
+  // reset pid_to boost
+  boostReset(playersInfo[pid_to]);
 }
 
 
@@ -506,6 +553,8 @@ var hookReel = (pid) => {
       h.reelingPlayer = pid;
       h.nofriction_timeout = nofriction_timeout;
       h.vel = hookVel;
+      // also reset knockback
+      knockbackReset(playersInfo[h.to]);
     }
     else {
       hookResetInit(hid, true);
@@ -535,7 +584,7 @@ var hookDelete = (hid) => {
 // should call hook_reset_init before running this...
 var hook_reset_velocity_update = (h) => {
   let reelDir = vec.sub(players[h.from].loc, h.loc);
-  h.vel = projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeed_reset, hookspeed_reset + playerVel_max);
+  h.vel = vec.normalized(reelDir, hookspeed_reset);//projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeed_reset, hookspeed_reset + playerVel_max);
 }
 
 // no need to call hook_detach before running this!!
@@ -594,38 +643,9 @@ var nofriction_timeout_decay = (h, dt) => {
     h.vel = vec.normalized(h.vel, hSpeedMultiplier * hookspeed_max);
   else {
     //player stops following hook and hook starts following player
-    playersInfo[h.reelingPlayer].hooks.followHook = null;
+    playersInfo[h.to].hooks.followHook = null;
     h.reelingPlayer = null;
     h.vel = null;
-  }
-
-}
-
-
-// assumes knockback.vel (and knockback.speed, and timeremaining)
-var knockback_timeout_decay = (pInfo, dt) => {
-  // decrease cooldown
-  if (pInfo.knockback.timeremaining) {
-    pInfo.knockback.timeremaining -= dt;
-    if (pInfo.knockback.timeremaining <= 0) {
-      //decay with the leftover time:
-      dt = -pInfo.knockback.timeremaining;
-      pInfo.knockback.timeremaining = null;
-      if (dt === 0) return;
-    }
-    else return;
-  }
-  // decay player now that cooldown is over
-  let kbSpeed = pInfo.knockback.speed;
-  let dv = -dt * (a0k * Math.pow(kbSpeed, 2) + b0k + c0k / (kbSpeed + d0k));
-  kbSpeed += dv;
-  if (kbSpeed > 0){
-    pInfo.knockback.speed = kbSpeed;
-  }
-  else {
-    //player stops following hook and hook starts following player
-    pInfo.knockback.speed = null;
-    pInfo.knockback.dir = null;
   }
 }
 /** ---------- EVENT HELPERS ---------- */
@@ -878,22 +898,28 @@ const runGame = () => {
         else if (!h.to) {
           // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
           if (getHookedBy(pid).has(h.from)) {
-            continue;
-            // hookResetInit(hid, true);
-            // hooksTakenCareOf.add(hid);
+            //reset old attached hook, and attach the new hook 
+            let oldhook = getHookFrom_To_(h.from, pid);
+
+            hookResetInit(oldhook, true);
+            hooksTakenCareOf.add(oldhook);
+
+            hookAttach(hid, pid);
+            hooksTakenCareOf.add(hid);
           }
-          //if two players hook each other, delete both hooks
+          //if two players hook each other, delete both hooks and knock each other back
           else if (getAttachedTo(pid).has(h.from)) {
             let hook_to_hfrom = getHookFrom_To_(pid, h.from);
 
-            // hookResetInit(hook_to_hfrom, true);
             hookDelete(hook_to_hfrom);
             hooksTakenCareOf.add(hook_to_hfrom);
 
-            // hookAttach(hid, pid);
-            // hookResetInit(hid, true);
+            knockbackAdd(hid, pid);
             hookDelete(hid);
             hooksTakenCareOf.add(hid);
+            // hookResetInit(hook_to_hfrom, true);
+            // hookAttach(hid, pid);
+            // hookResetInit(hid, true);
           }
           // otherwise, just attach the hook!
           else {
