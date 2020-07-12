@@ -384,7 +384,7 @@ var getAttachedTo = (pid) => {
 }
 //gets hid from p_from to p_to
 // assumes a hook to pid_from to pid_to exists
-var getHookTo = (pid_from, pid_to) => {
+var getHookFrom_To_ = (pid_from, pid_to) => {
   for (let hid of getOwned(pid_from)) {
     if (hooks[hid].to === pid_to) return hid;
   }
@@ -717,7 +717,7 @@ io.on('connection', (socket) => {
 // ---------- RUN GAME (socket calls do the updating, this just runs it) ----------
 const hooksTakenCareOf = new Set();
 var prevtime = null;
-const runGame = () => {
+  const runGame = () => {
   if (!prevtime) {
     prevtime = Date.now();
     return;
@@ -746,7 +746,7 @@ const runGame = () => {
     if (vec.magnitude(vec.sub(players[h.from].loc, h.loc)) > hookCutoffDistance) {
       hookResetInit(hid, true);
     } else {
-      hooksTakenCareOf.clear();
+      hooksTakenCareOf.clear(); //ensures two players dont try to delete the same hook
       for (let pid in players) { //pid = player to be hooked
         //player has exited hook, so remove it from waitTillExit
         if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius)) {
@@ -758,7 +758,7 @@ const runGame = () => {
         // if colliding and not in waitTillExit
         else if (!h.waitTillExit.has(pid)) {
           //if player colliding with their own hook, delete
-          if (h.from === pid) {
+          if (h.from === pid && !h.to) {
             hookDelete(hid);
             hooksTakenCareOf.add(hid);
           }
@@ -771,13 +771,15 @@ const runGame = () => {
             }
             //if two players hook each other, delete both hooks
             else if (getAttachedTo(pid).has(h.from)) {
-              let hook_to_hfrom = getHookTo(pid, h.from);
+              let hook_to_hfrom = getHookFrom_To_(pid, h.from);
 
-              hookResetInit(hook_to_hfrom, true);
-              hooksTakenCareOf.add(hid);
+              // hookResetInit(hook_to_hfrom, true);
+              hookDelete(hook_to_hfrom);
+              hooksTakenCareOf.add(hook_to_hfrom);
 
-              hookAttach(hid, pid);
-              hookResetInit(hid, true);
+              // hookAttach(hid, pid);
+              // hookResetInit(hid, true);
+              hookDelete(hid);
               hooksTakenCareOf.add(hid);
             }
             // otherwise, just attach the hook!
