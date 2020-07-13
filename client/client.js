@@ -85,10 +85,11 @@ var keyActions = {
 /** ---------- DRAWING / GRAPHICS ---------- */
 
 var drawBorder = () => {
+  let origin = { x: 0, y: 0 };
   c.beginPath();
   c.lineWidth = 20;
   c.strokeStyle = 'green';
-  c.arc(0, -0, mapRadius + c.lineWidth / 2, 0, 2 * Math.PI);
+  c.arc(origin.x, -origin.y, mapRadius + c.lineWidth / 2, 0, 2 * Math.PI);
   c.stroke();
 }
 
@@ -161,11 +162,18 @@ const canv_top = canvas.getBoundingClientRect().top;
 const canv_left = canvas.getBoundingClientRect().left;
 
 var c = canvas.getContext("2d");
+
 var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
-
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
+
+let updateCanvasSize = () => {
+  WIDTH = window.innerWidth;
+  HEIGHT = window.innerHeight;
+  canvas.width = WIDTH;
+  canvas.height = HEIGHT;
+}
 
 var prevtime;
 var starttime;
@@ -280,10 +288,14 @@ document.addEventListener('mousedown', function (event) {
   }
 });
 
+document.addEventListener('wheel', event => console.log(event));
 
+//anti right-click
 document.addEventListener('contextmenu', event => event.preventDefault());
 
-
+window.addEventListener('resize', () => {
+  updateCanvasSize();
+});
 
 
 const whenConnect = async () => {

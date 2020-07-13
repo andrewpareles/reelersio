@@ -54,13 +54,13 @@ const dot = (a, b) => {
 
 // a = location of a, b = loc of b, r_a = radius of a, r_b = radius of b
 const isCollided = (a, b, r_a, r_b) => {
-  return magnitude(sub(a, b)) < r_a + r_b;
+  return magnitude(sub(a, b)) <= r_a + r_b;
 }
 
 // outside = location of outside object, r_out = radius of it
 // requires r_out > r_in
 const isContaining = (outside, inside, r_out, r_in) => {
-  return magnitude(sub(outside, inside)) < r_out - r_in;
+  return magnitude(sub(outside, inside)) <= r_out - r_in;
 }
 
 const average = (vecs) => {
