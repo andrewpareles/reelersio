@@ -14,9 +14,14 @@ const socket = io(ADDRESS);
  * these are initialized by server after player joins
  */
 var players = null;
+var hooks = null;
 var playerid = null;
 var world = null;
 
+var playerRadius = null;
+var hookRadius_outer = null;
+var hookRadius_inner = null;
+var mapRadius = null;
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -78,25 +83,14 @@ var keyActions = {
 
 
 /** ---------- DRAWING / GRAPHICS ---------- */
-function graphics_brightenColor(col, amt) {
-  var usePound = false;
-  if (col[0] == "#") {
-    col = col.slice(1);
-    usePound = true;
-  }
-  var num = parseInt(col, 16);
-  var r = (num >> 16) + amt;
-  if (r > 255) r = 255;
-  else if (r < 0) r = 0;
-  var b = ((num >> 8) & 0x00FF) + amt;
-  if (b > 255) b = 255;
-  else if (b < 0) b = 0;
-  var g = (num & 0x0000FF) + amt;
-  if (g > 255) g = 255;
-  else if (g < 0) g = 0;
-  return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
-}
 
+var drawBorder = () => {
+  c.beginPath();
+  c.lineWidth = 20;
+  c.strokeStyle = 'green';
+  c.arc(0, -0, mapRadius + c.lineWidth / 2, 0, 2 * Math.PI);
+  c.stroke();
+}
 
 var drawPlayer = (p) => {
   let color = p.color;
@@ -118,17 +112,15 @@ var drawPlayer = (p) => {
 
 var drawHook = (h) => {
   let p = players[h.from];
-  let pcolor = p.color;
   let ploc = p.loc;
   let hloc = h.loc;
-
+  let [hcol, linecol, bobbercol] = h.colors;
   let outer_lw = 2;
   let inner_lw = 2;
-  let hookRadius_inner = .7 * (hookRadius / Math.sqrt(2)); //square radius (not along diagonal)
   // draw the line
   c.beginPath();
   c.lineWidth = 1;
-  c.strokeStyle = graphics_brightenColor(pcolor, 30);
+  c.strokeStyle = linecol;
   c.moveTo(ploc.x, -ploc.y);
   c.lineTo(hloc.x, -hloc.y);
   c.stroke();
@@ -136,7 +128,7 @@ var drawHook = (h) => {
   // draw the hook
   // inside bobber (square)
   c.beginPath();
-  c.strokeStyle = graphics_brightenColor(pcolor, -20);
+  c.strokeStyle = hcol;
   c.lineWidth = inner_lw;
   c.rect(hloc.x - hookRadius_inner + inner_lw / 2, -(hloc.y - hookRadius_inner + inner_lw / 2), 2 * hookRadius_inner - inner_lw, -(2 * hookRadius_inner - inner_lw));
   c.stroke();
@@ -144,8 +136,8 @@ var drawHook = (h) => {
   // outside container (circle)
   c.beginPath();
   c.lineWidth = outer_lw;
-  c.strokeStyle = graphics_brightenColor(pcolor, -50);
-  c.arc(hloc.x, -hloc.y, hookRadius + outer_lw / 2, 0, 2 * Math.PI);
+  c.strokeStyle = bobbercol;
+  c.arc(hloc.x, -hloc.y, hookRadius_outer + outer_lw / 2, 0, 2 * Math.PI);
   c.stroke();
 }
 
@@ -193,24 +185,28 @@ let newFrame = (timestamp) => {
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
 
-  //Multiplier decay
-
-  // console.log("effective, boostMult:", boostMultiplierEffective, boostMultiplier);
   //render:
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
+  //draw holes:
   for (let hlid in world.holes) {
     let hl = world.holes[hlid];
     drawHole(hl);
   }
 
+  //draw border:
+  drawBorder();
+
+  //draw others:
   for (let pid in players) {
+    if (pid === socket.id) continue;
     let p = players[pid];
-    //update other players by interpolating velocity
     drawPlayer(p);
   }
+  //draw me last
+  drawPlayer(players[socket.id]);
 
-  // draw & update hooks
+  // draw hooks
   for (let hid in hooks) {
     let h = hooks[hid];
     drawHook(h);
@@ -293,13 +289,15 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad) => {
+  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad_out, hRad_in, mapRad) => {
     playerid = socket.id;
     players = serverPlayers;
     hooks = serverHooks;
     world = serverWorld;
     playerRadius = pRad;
-    hookRadius = hRad;
+    hookRadius_outer = hRad_out;
+    hookRadius_inner = hRad_in;
+    mapRadius = mapRad;
   };
   await send.join(joinCallback);
 
@@ -308,7 +306,7 @@ const whenConnect = async () => {
   console.log("hooks", hooks);
   console.log("world", world);
   console.log("playerRadius", playerRadius);
-  console.log("hookRadius", hookRadius);
+  console.log("hookRadius", hookRadius_outer);
 
   // once get here, know that everything is defined, so can start rendering  
   // 2. start game
@@ -318,11 +316,10 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverHooks, serverWorld) => {
+const serverImage = (serverPlayers, serverHooks) => {
   if (!players) console.log("too early");
   players = serverPlayers;
   hooks = serverHooks;
-  world = serverWorld;
 }
 socket.on('serverimage', serverImage);
 
