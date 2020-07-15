@@ -191,6 +191,7 @@ var prevtime;
 var starttime;
 var currtime;
 let newFrame = (timestamp) => {
+  console.log(camZoom);
   if (starttime === undefined) {
     starttime = timestamp;
     prevtime = timestamp;
@@ -291,8 +292,10 @@ document.addEventListener('mousedown', function (event) {
 });
 
 document.addEventListener('wheel', event => {
-  console.log(event);
-  camZoom += event.deltaY / 1000;
+  let dZoom = event.deltaY / 1000;
+  if (camZoom + dZoom > 0) {
+    camZoom += dZoom;
+  }
 });
 
 //anti right-click
