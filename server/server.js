@@ -18,13 +18,13 @@ const WAIT_TIME = 8; // # ms to wait to re-render & broadcast players object
 const mapRadius = 2000;
 
 const playerRadius = 40; //pix
-const walkspeed = 150 / 1000; // pix/ms
+const walkspeed = 225 / 1000; // pix/ms
 const walkspeed_hooked = 100 / 1000; // pix/ms
 
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
 const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook radius (square radius, not along diagonal) (PURELY COSMETIC)
 
-const boostMultEffective_max = (2.5 * 124 / 1000) / walkspeed;
+const boostMultEffective_max = .6;
 const boostMult_max = 3;
 
 const kb_minspeed = 124 / 1000;
@@ -41,13 +41,13 @@ const d0 = 1 / (.5 * 16);
 // v0 = init boost vel, t = time since boost started
 
 const hookspeed_max = playerVel_max + 50 / 1000;
-const hookspeed_min = 300 / 1000;
-const hookspeed_min_hooked = hookspeed_max;
+const hookspeed_min = 400 / 1000;
+const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
 
 const hookspeed_reset = 800 / 1000;
 
-const hookspeedreel_min = 220 / 1000; //230 / 1000;
-const hookspeedreel_max = 235 / 1000; //280 / 1000;
+const hookspeedreel_min = 300 / 1000; //230 / 1000;
+const hookspeedreel_max = 335 / 1000; //280 / 1000;
 const reel_cooldown = 1.7 * 1000;
 const nofriction_timeout = .25 * 1000;
 
@@ -136,6 +136,7 @@ const playerHookColorPalette = generateColorPalette();
 // right clicking always reels unattached player
 //conservation of energy of knockback
 //rendering fixes when zoom 
+// better aiming
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -234,9 +235,27 @@ Hook invariants:
 var world = {
   holes: {
     sparta: {
-      loc: { x: 400, y: -400 },
+      loc: { x: 0, y: 0 },
       radius: 150,
       color: 'black',
+    },
+
+    hl1: {
+      loc: { x: 400, y: -400 },
+      radius: 60,
+      color: 'gray',
+    },
+
+    hl2: {
+      loc: { x: 400, y: 400 },
+      radius: 60,
+      color: 'blue',
+    },
+
+    hl3: {
+      loc: { x: -400, y: -400 },
+      radius: 40,
+      color: 'orange',
     }
 
   }
@@ -767,7 +786,10 @@ var player_delete = (pid) => {
 /** ---------- SOCKET CALLS & FUNCTIONS ---------- */
 
 const generateStartingLocation = () => {
-  return { x: 20, y: 20 };
+  let r = Math.random() * mapRadius;
+  let theta = Math.random() * 2 * Math.PI;
+  let pos = { x: r * Math.cos(theta), y: -r * Math.sin(theta) };
+  return pos;
   // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
 }
 
@@ -922,9 +944,11 @@ const runGame = () => {
       nofriction_timeout_decay(h, dt);
     else if (h.isResetting) //h.reelingPlayer will never be true when h.isResetting, since reelingPlayer requries h.to and resetting requires !h.to
       hook_reset_velocity_update(h);
-
-    if (h.vel)
+    
+    if (h.vel){
+      // h.vel = vec.normalized(vec.add(vec.normalized(players[h.from].vel, 1/1000), vec.normalized(h.vel)), vec.magnitude(h.vel));
       h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
+    }
   }
 
 
@@ -972,7 +996,7 @@ const runGame = () => {
     // --- DELETE HOOK IF TOO FAR --- 
     // if hook is too far, delete it
     if (!vec.isContaining(players[h.from].loc, h.loc, hookCutoffDistance, 0)) {
-      hookDelete(hid);
+      hookResetInit(hid, false);
       continue;
     }
     // --- UPDATE LOC OF HOOKS FOLLOWING A PLAYER --- 
