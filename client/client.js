@@ -293,7 +293,6 @@ document.addEventListener('mousedown', function (event) {
 document.addEventListener('wheel', event => {
   console.log(event);
   camZoom += event.deltaY / 1000;
-  console.log('zoom', camZoom, 'dY', event.deltaY / 1000);
 });
 
 //anti right-click
