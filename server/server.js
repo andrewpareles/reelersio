@@ -24,7 +24,7 @@ const walkspeed_hooked = 100 / 1000; // pix/ms
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
 const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook radius (square radius, not along diagonal) (PURELY COSMETIC)
 
-const boostMultEffective_max = .6;
+const boostMultEffective_max = 1;
 const boostMult_max = 3;
 
 const kb_minspeed = 124 / 1000;
@@ -136,7 +136,8 @@ const playerHookColorPalette = generateColorPalette();
 // right clicking always reels unattached player
 //conservation of energy of knockback
 //rendering fixes when zoom 
-// better aiming
+// better aiming (SHIFTING)
+// boost fix (is it broken? decays instantly)
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {

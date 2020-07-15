@@ -116,10 +116,10 @@ var getPosOnScreen = (locInWorld) => {
 var playerCamera = {
   drawWorldBorder: () => {
     c.beginPath();
-    c.lineWidth = 20;
+    c.lineWidth = 20 / camZoom;
     c.strokeStyle = 'green';
     let pos = getPosOnScreen({ x: 0, y: 0 });
-    c.arc(pos.x, pos.y, (mapRadius + c.lineWidth / 2) / camZoom, 0, 2 * Math.PI);
+    c.arc(pos.x, pos.y, mapRadius / camZoom + c.lineWidth / 2, 0, 2 * Math.PI);
     c.stroke();
   },
 
@@ -130,7 +130,7 @@ var playerCamera = {
     c.beginPath();
     c.lineWidth = 6 / camZoom;
     c.strokeStyle = color;
-    c.arc(loc.x, loc.y, (playerRadius - c.lineWidth / 2) / camZoom, 0, 2 * Math.PI);
+    c.arc(loc.x, loc.y, playerRadius / camZoom - c.lineWidth / 2, 0, 2 * Math.PI);
     c.stroke();
 
     // c.font = "10px Verdana";
@@ -144,8 +144,8 @@ var playerCamera = {
     let ploc = getPosOnScreen(players[pid_from].loc);
     let hloc = getPosOnScreen(hooks[hid].loc);
     let [hcol, linecol, bobbercol] = hooks[hid].colors;
-    let outer_lw = 2;
-    let inner_lw = 2;
+    let outer_lw = 2 / camZoom;
+    let inner_lw = 2 / camZoom;
     // draw the line
     c.beginPath();
     c.lineWidth = 1 / camZoom;
@@ -158,14 +158,14 @@ var playerCamera = {
     // inside hook (square)
     c.beginPath();
     c.strokeStyle = hcol;
-    c.lineWidth = inner_lw / camZoom;
+    c.lineWidth = inner_lw;
     let hRad_inner = hookRadius_inner / camZoom;
     c.rect(hloc.x - hRad_inner + inner_lw / 2, hloc.y - hRad_inner + inner_lw / 2, 2 * hRad_inner - inner_lw, 2 * hRad_inner - inner_lw);
     c.stroke();
 
     // outside bobber (circle)
     c.beginPath();
-    c.lineWidth = outer_lw / camZoom;
+    c.lineWidth = outer_lw;
     c.strokeStyle = bobbercol;
     let hRad_outer = hookRadius_outer / camZoom;
     c.arc(hloc.x, hloc.y, hRad_outer + outer_lw / 2, 0, 2 * Math.PI);
