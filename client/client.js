@@ -2,13 +2,9 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
-
-/** ---------- VECTOR FUNCTIONS ---------- */
-//vector functions on {x: , y:}:
-
 
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
@@ -84,7 +80,8 @@ var keyActions = {
 
 /** ---------- DRAWING / GRAPHICS ---------- */
 
-var drawBorder = () => {
+
+var drawWorldBorder = () => {
   let origin = { x: 0, y: 0 };
   c.beginPath();
   c.lineWidth = 20;
@@ -203,7 +200,7 @@ let newFrame = (timestamp) => {
   }
 
   //draw border:
-  drawBorder();
+  drawWorldBorder();
 
   //draw others:
   for (let pid in players) {

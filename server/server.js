@@ -433,17 +433,23 @@ var player_velocity_update = (pInfo, p, followHook) => {
 /** ---------- KNOCKBACK FUNCTIONS ---------- */
 // pid of player being kb'd, hid of hook knocking back player
 var knockbackAdd = (hid, pid) => {
-  let hookToKbPlayer = hooks[hid].vel; // vec.sub(players[pid].loc, hooks[hid].loc);
-  // let throwPlayerToHook = vec.sub(hooks[hid].loc, players[hooks[hid].from].loc);
-  let mult = 1;//Math.abs(vec.dot(vec.normalized(hookToKbPlayer), vec.normalized(throwPlayerToHook)));
-  let kbVel = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, kb_minspeed, kb_maxspeed, hookspeed_max);
+  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, kb_minspeed, kb_maxspeed, hookspeed_max);
+  let kbVel;
+  let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
+  //if hook is headed towards player (ie NOT FAR INSIDE PLAYER), incorporate pool ball effect:
+  if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) {
+    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, kb_minspeed, kb_maxspeed, hookspeed_max);
+    kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);  
+  } else { //just hook vel:
+    kbVel = kbFromHookVel;
+  }
 
   let pInfo = playersInfo[pid];
   if (pInfo.knockback.dir) { //add onto previous kb
     kbVel = vec.add(vec.normalized(pInfo.knockback.dir, pInfo.knockback.speed), kbVel);
   }
   pInfo.knockback.dir = vec.normalized(kbVel);
-  pInfo.knockback.speed = vec.magnitude(kbVel) * mult;
+  pInfo.knockback.speed = vec.magnitude(kbVel);
   pInfo.knockback.timeremaining = knockback_timeout;
 }
 

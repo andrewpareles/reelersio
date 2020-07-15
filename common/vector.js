@@ -63,7 +63,7 @@ const isContaining = (outside, inside, r_out, r_in) => {
   return magnitude(sub(outside, inside)) <= r_out - r_in;
 }
 
-const average = (vecs) => {
+const average = (...vecs) => {
   return scalar(add(...vecs), 1 / vecs.length);
 }
 
