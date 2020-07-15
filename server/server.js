@@ -40,18 +40,18 @@ const d0 = 1 / (.5 * 16);
 // ^ Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
 // v0 = init boost vel, t = time since boost started
 
-const hookspeed_reset = 800 / 1000;
-
 const hookspeed_max = playerVel_max + 50 / 1000;
 const hookspeed_min = 300 / 1000;
 const hookspeed_min_hooked = hookspeed_max;
+
+const hookspeed_reset = 800 / 1000;
 
 const hookspeedreel_min = 220 / 1000; //230 / 1000;
 const hookspeedreel_max = 235 / 1000; //280 / 1000;
 const reel_cooldown = 1.7 * 1000;
 const nofriction_timeout = .25 * 1000;
 
-const throw_cooldown = 200; //ms
+const throw_cooldown = 100; //ms
 
 const maxHooksOut = 2; //per player
 const hookCutoffDistance = 1000; //based on center of player and center of hook
@@ -132,7 +132,10 @@ const playerHookColorPalette = generateColorPalette();
 // hook turns red if almost too far
 // world is sent once at beginning, callback does not do anything with players or hooks
 
-
+//left click again deletes hook that's out
+// right clicking always reels unattached player
+//conservation of energy of knockback
+//rendering fixes when zoom 
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -439,7 +442,7 @@ var knockbackAdd = (hid, pid) => {
   //if hook is headed towards player (ie NOT FAR INSIDE PLAYER), incorporate pool ball effect:
   if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) {
     let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, kb_minspeed, kb_maxspeed, hookspeed_max);
-    kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);  
+    kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);
   } else { //just hook vel:
     kbVel = kbFromHookVel;
   }
@@ -865,23 +868,26 @@ io.on('connection', (socket) => {
   socket.on('leftclick', (hookDir) => {// hookDir is {x, y}
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
-    if (pInfo.hooks.owned.size < maxHooksOut && !pInfo.hooks.throw_cooldown) {
-      hookThrow(socket.id, hookDir);
+    if (!pInfo.hooks.throw_cooldown) {
+      //throw a new hook
+      if (pInfo.hooks.owned.size < maxHooksOut)
+        hookThrow(socket.id, hookDir);
     }
   });
 
   socket.on('rightclick', () => {
     // console.log('starting to reel')
     let pInfo = playersInfo[socket.id];
-    if (!pInfo.hooks.reel_cooldown && pInfo.hooks.owned.size >= 1) {
+    if (pInfo.hooks.owned.size >= 1) {
       // console.log('reeling');
-      hookReel(socket.id);
+      if (!pInfo.hooks.reel_cooldown)
+        hookReel(socket.id);
     }
   });
 
 
   socket.on('resethooks', () => {
-    hook_resetAllOwned(socket.id, true);
+    hook_deleteAllOwned(socket.id);
   });
 
 
