@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'http://192.168.1.204:3001';
-// const ADDRESS = 'https://trussbucket.herokuapp.com/';
+// const ADDRESS = 'http://192.168.1.204:3001';
+const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -77,82 +77,6 @@ var keyActions = {
 
 
 
-
-/** ---------- DRAWING / GRAPHICS ---------- */
-
-
-var drawWorldBorder = () => {
-  let origin = { x: 0, y: 0 };
-  c.beginPath();
-  c.lineWidth = 20;
-  c.strokeStyle = 'green';
-  c.arc(origin.x, -origin.y, mapRadius + c.lineWidth / 2, 0, 2 * Math.PI);
-  c.stroke();
-}
-
-var drawPlayer = (p) => {
-  let color = p.color;
-  let loc = p.loc;
-
-  c.beginPath();
-  c.lineWidth = 6;
-  c.strokeStyle = color;
-  c.arc(loc.x, -loc.y, playerRadius - c.lineWidth / 2, 0, 2 * Math.PI);
-  c.stroke();
-
-  // c.font = "10px Verdana";
-  // c.textAlign = "center";
-  // c.textBaseline = "top";
-  // c.fillStyle = color;
-  // c.fillText(username, loc.x, loc.y + playerRadius + 5);
-
-}
-
-var drawHook = (h) => {
-  let p = players[h.from];
-  let ploc = p.loc;
-  let hloc = h.loc;
-  let [hcol, linecol, bobbercol] = h.colors;
-  let outer_lw = 2;
-  let inner_lw = 2;
-  // draw the line
-  c.beginPath();
-  c.lineWidth = 1;
-  c.strokeStyle = linecol;
-  c.moveTo(ploc.x, -ploc.y);
-  c.lineTo(hloc.x, -hloc.y);
-  c.stroke();
-
-  // draw the hook
-  // inside bobber (square)
-  c.beginPath();
-  c.strokeStyle = hcol;
-  c.lineWidth = inner_lw;
-  c.rect(hloc.x - hookRadius_inner + inner_lw / 2, -(hloc.y - hookRadius_inner + inner_lw / 2), 2 * hookRadius_inner - inner_lw, -(2 * hookRadius_inner - inner_lw));
-  c.stroke();
-
-  // outside container (circle)
-  c.beginPath();
-  c.lineWidth = outer_lw;
-  c.strokeStyle = bobbercol;
-  c.arc(hloc.x, -hloc.y, hookRadius_outer + outer_lw / 2, 0, 2 * Math.PI);
-  c.stroke();
-}
-
-
-
-var drawHole = (q) => {
-  let color = q.color;
-  let loc = q.loc;
-  let radius = q.radius;
-
-  c.beginPath();
-  c.lineWidth = radius;
-  c.strokeStyle = color;
-  c.arc(loc.x, -loc.y, radius - c.lineWidth / 2, 0, 2 * Math.PI);
-  c.stroke();
-}
-
 /** ---------- CANVAS / SCREEN CONSTANTS ---------- */
 var canvas = document.getElementById("canvas");
 const canv_top = canvas.getBoundingClientRect().top;
@@ -164,19 +88,108 @@ var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
+var midScreen = { x: WIDTH / 2, y: -HEIGHT / 2 }; //in world coords
 
 let updateCanvasSize = () => {
   WIDTH = window.innerWidth;
   HEIGHT = window.innerHeight;
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
+  midScreen = { x: WIDTH / 2, y: -HEIGHT / 2 };
 }
 
+
+/** ---------- DRAWING / CAMERA / GRAPHICS ---------- */
+//1. update camZoom and camLoc
+//2. call updateCamView()
+//3. when drawing, use getPosOnScreen.
+var camZoom = 1;
+var camLoc = null; //camera location in world
+
+var getPosOnScreen = (locInWorld) => {
+  let camToObj = vec.sub(locInWorld, camLoc);
+  let screenPos = vec.normalized(camToObj, vec.magnitude(camToObj) / camZoom);
+  let posWithNegY = vec.add(screenPos, midScreen);
+  return { x: posWithNegY.x, y: -posWithNegY.y };
+}
+
+var playerCamera = {
+  drawWorldBorder: () => {
+    c.beginPath();
+    c.lineWidth = 20;
+    c.strokeStyle = 'green';
+    let pos = getPosOnScreen({ x: 0, y: 0 });
+    c.arc(pos.x, pos.y, (mapRadius + c.lineWidth / 2) / camZoom, 0, 2 * Math.PI);
+    c.stroke();
+  },
+
+  drawPlayer: (pid) => {
+    let color = players[pid].color;
+    let loc = getPosOnScreen(players[pid].loc);
+
+    c.beginPath();
+    c.lineWidth = 6 / camZoom;
+    c.strokeStyle = color;
+    c.arc(loc.x, loc.y, (playerRadius - c.lineWidth / 2) / camZoom, 0, 2 * Math.PI);
+    c.stroke();
+
+    // c.font = "10px Verdana";
+    // c.textAlign = "center";
+    // c.textBaseline = "top";
+    // c.fillStyle = color;
+    // c.fillText(username, loc.x, loc.y + playerRadius + 5);
+  },
+
+  drawHook: (hid, pid_from) => {
+    let ploc = getPosOnScreen(players[pid_from].loc);
+    let hloc = getPosOnScreen(hooks[hid].loc);
+    let [hcol, linecol, bobbercol] = hooks[hid].colors;
+    let outer_lw = 2;
+    let inner_lw = 2;
+    // draw the line
+    c.beginPath();
+    c.lineWidth = 1 / camZoom;
+    c.strokeStyle = linecol;
+    c.moveTo(ploc.x, ploc.y);
+    c.lineTo(hloc.x, hloc.y);
+    c.stroke();
+
+    // draw the hook
+    // inside hook (square)
+    c.beginPath();
+    c.strokeStyle = hcol;
+    c.lineWidth = inner_lw / camZoom;
+    let hRad_inner = hookRadius_inner / camZoom;
+    c.rect(hloc.x - hRad_inner + inner_lw / 2, hloc.y - hRad_inner + inner_lw / 2, 2 * hRad_inner - inner_lw, 2 * hRad_inner - inner_lw);
+    c.stroke();
+
+    // outside bobber (circle)
+    c.beginPath();
+    c.lineWidth = outer_lw / camZoom;
+    c.strokeStyle = bobbercol;
+    let hRad_outer = hookRadius_outer / camZoom;
+    c.arc(hloc.x, hloc.y, hRad_outer + outer_lw / 2, 0, 2 * Math.PI);
+    c.stroke();
+  },
+
+  drawHole: (hlid) => {
+    let color = world.holes[hlid].color;
+    let loc = getPosOnScreen(world.holes[hlid].loc);
+    let radius = world.holes[hlid].radius / camZoom;
+
+    c.beginPath();
+    c.lineWidth = radius;
+    c.strokeStyle = color;
+    c.arc(loc.x, loc.y, radius - c.lineWidth / 2, 0, 2 * Math.PI);
+    c.stroke();
+  },
+}
+
+
+/** ---------- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ---------- */
 var prevtime;
 var starttime;
 var currtime;
-
-/** ---------- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ---------- */
 let newFrame = (timestamp) => {
   if (starttime === undefined) {
     starttime = timestamp;
@@ -190,45 +203,37 @@ let newFrame = (timestamp) => {
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
 
+  //camera:
+  camLoc = players[socket.id].loc;
   //render:
+
+
   c.clearRect(0, 0, WIDTH, HEIGHT);
 
   //draw holes:
   for (let hlid in world.holes) {
-    let hl = world.holes[hlid];
-    drawHole(hl);
+    playerCamera.drawHole(hlid);
   }
 
   //draw border:
-  drawWorldBorder();
+  playerCamera.drawWorldBorder();
 
   //draw others:
   for (let pid in players) {
     if (pid === socket.id) continue;
-    let p = players[pid];
-    drawPlayer(p);
+    playerCamera.drawPlayer(pid);
   }
   //draw me last
-  drawPlayer(players[socket.id]);
+  playerCamera.drawPlayer(socket.id);
 
   // draw hooks
   for (let hid in hooks) {
-    let h = hooks[hid];
-    drawHook(h);
+    playerCamera.drawHook(hid, hooks[hid].from);
   }
 
 
   window.requestAnimationFrame(newFrame);
 }
-
-
-
-
-
-
-
-
-
 
 
 /** ---------- LISTENERS ---------- */
@@ -274,7 +279,7 @@ document.addEventListener('mousedown', function (event) {
     //left click:
     case 0:
       let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.sub(mousePos, players[playerid].loc); //points from player to mouse
+      let hookDir = vec.sub(mousePos, midScreen); //points from player to mouse
       send.leftclick(hookDir);
       break;
     //right click
@@ -285,7 +290,11 @@ document.addEventListener('mousedown', function (event) {
   }
 });
 
-document.addEventListener('wheel', event => console.log(event));
+document.addEventListener('wheel', event => {
+  console.log(event);
+  camZoom += event.deltaY / 1000;
+  console.log('zoom', camZoom, 'dY', event.deltaY / 1000);
+});
 
 //anti right-click
 document.addEventListener('contextmenu', event => event.preventDefault());
