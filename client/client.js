@@ -111,6 +111,8 @@ var camZoomIsResetting = false;
 
 const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
 const bgLineSpacing = 500;
+const bgLineWidth = .1;
+const bgMaxLines = 4;
 
 const positiveMod = (n, m) => {
   if (n < 0) return ((n % m) + m) % m;
@@ -122,6 +124,19 @@ var getPosOnScreen = (locInWorld) => {
   let screenPos = vec.normalized(camToObj, vec.magnitude(camToObj) / camZoom);
   let posWithNegY = vec.add(screenPos, midScreen);
   return { x: posWithNegY.x, y: -posWithNegY.y };
+}
+
+var drawIntersection = ({ x, y }) => {
+  c.beginPath();
+  c.lineWidth = bgLineWidth;
+  c.strokeStyle = 'hsla(0,0%,30%,.3)';
+  //horizontal
+  c.moveTo(0, y);
+  c.lineTo(WIDTH, y);
+  //vertical
+  c.moveTo(x, 0);
+  c.lineTo(x, HEIGHT);
+  c.stroke();
 }
 var playerCamera = {
   update: (newCamLoc, dt) => {
@@ -143,27 +158,31 @@ var playerCamera = {
     }
   },
   drawBG: () => {
-    let xIntersection = midScreen.x - positiveMod(camLoc.x, bgLineSpacing) / camZoom;
-    let yIntersection = -midScreen.y - positiveMod(-camLoc.y, bgLineSpacing) / camZoom;
     let xN = Math.ceil((WIDTH / 2) * camZoom / bgLineSpacing); //num times to draw in half a screen
     let yN = Math.ceil((HEIGHT / 2) * camZoom / bgLineSpacing);
-    for (let xn = -xN; xn <= xN; xn++) {
-      for (let yn = -yN; yn <= yN; yn++) {
-        let x = xIntersection + xn * bgLineSpacing / camZoom;
-        let y = yIntersection + yn * bgLineSpacing / camZoom;
-        c.beginPath();
-        c.lineWidth = .5 / camZoom;
-        c.strokeStyle = 'hsla(0,0%,30%,.3)';
-        //horizontal
-        c.moveTo(0, y);
-        c.lineTo(WIDTH, y);
-        //vertical
-        c.moveTo(x, 0);
-        c.lineTo(x, HEIGHT);
-        c.stroke();
+    let add = Math.pow(2, Math.ceil(Math.log2(Math.min(xN, yN) / bgMaxLines)));//draw every other nth line, where n = add
+    let camLocModSpacing = {
+      x: positiveMod(camLoc.x, add * bgLineSpacing),
+      y: positiveMod(camLoc.y, add * bgLineSpacing),
+    };
+    let s = 0;
+    let intersectionLoc = getPosOnScreen(vec.sub(camLoc, camLocModSpacing));
+    for (let xn = 0; xn <= xN; xn += add) {
+      for (let yn = 0; yn <= yN; yn += add) {
+        s++;
+        drawIntersection({
+          x: intersectionLoc.x + xn * bgLineSpacing / camZoom,
+          y: intersectionLoc.y + yn * bgLineSpacing / camZoom,
+        });
+        if (!(xn === 0 && yn === 0)) {
+          drawIntersection({
+            x: intersectionLoc.x - xn * bgLineSpacing / camZoom,
+            y: intersectionLoc.y - yn * bgLineSpacing / camZoom,
+          });
+        }
       }
     }
-
+    console.log(s);
   },
   drawWorldBorder: () => {
     c.beginPath();

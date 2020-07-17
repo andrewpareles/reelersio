@@ -48,8 +48,8 @@ const b0k = 4 * 1 / (1000 * 16);
 const c0k = 2 * 1 / (30 * 16);
 const d0k = 1 / (.015 * 16);
 
-const hookspeed_max = 2 * playerVel_max + 50 / 1000;
 const hookspeed_min = playerVel_max;
+const hookspeed_max =  hookspeed_min + 150 / 1000;
 const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
