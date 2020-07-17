@@ -174,7 +174,7 @@ var playerCamera = {
           x: intersectionLoc.x + xn * bgLineSpacing / camZoom,
           y: intersectionLoc.y + yn * bgLineSpacing / camZoom,
         });
-        if (!(xn === 0 && yn === 0)) {
+        if (xn !== 0 && yn !== 0) {
           drawIntersection({
             x: intersectionLoc.x - xn * bgLineSpacing / camZoom,
             y: intersectionLoc.y - yn * bgLineSpacing / camZoom,
