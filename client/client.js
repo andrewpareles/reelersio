@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -18,6 +18,7 @@ var playerRadius = null;
 var hookRadius_outer = null;
 var hookRadius_inner = null;
 var mapRadius = null;
+var maxHooks = null;
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -72,7 +73,8 @@ var keyDirections = {
 }
 var keyActions = {
   'r': "resethooks",
-  '/': "chat"
+  'z': "resetzoom",
+  '/': "chat",
 }
 
 
@@ -105,6 +107,15 @@ let updateCanvasSize = () => {
 //3. when drawing, use getPosOnScreen.
 var camZoom = 1;
 var camLoc = null; //camera location in world
+var camZoomIsResetting = false;
+
+const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
+const bgLineSpacing = 500;
+
+const positiveMod = (n, m) => {
+  if (n < 0) return ((n % m) + m) % m;
+  else return n % m;
+}
 
 var getPosOnScreen = (locInWorld) => {
   let camToObj = vec.sub(locInWorld, camLoc);
@@ -112,8 +123,48 @@ var getPosOnScreen = (locInWorld) => {
   let posWithNegY = vec.add(screenPos, midScreen);
   return { x: posWithNegY.x, y: -posWithNegY.y };
 }
-
 var playerCamera = {
+  update: (newCamLoc, dt) => {
+    camLoc = newCamLoc;
+    if (camZoomIsResetting) {
+      if (camZoom > 1) { //zoom too big
+        camZoom -= camZoom * camZoomResetMult * dt;
+        if (camZoom <= 1) {
+          camZoom = 1;
+          camZoomIsResetting = false;
+        }
+      } else { //zoom too small
+        camZoom += camZoom * camZoomResetMult * dt;
+        if (camZoom >= 1) {
+          camZoom = 1;
+          camZoomIsResetting = false;
+        }
+      }
+    }
+  },
+  drawBG: () => {
+    let xIntersection = midScreen.x - positiveMod(camLoc.x, bgLineSpacing) / camZoom;
+    let yIntersection = -midScreen.y - positiveMod(-camLoc.y, bgLineSpacing) / camZoom;
+    let xN = Math.ceil((WIDTH / 2) * camZoom / bgLineSpacing); //num times to draw in half a screen
+    let yN = Math.ceil((HEIGHT / 2) * camZoom / bgLineSpacing);
+    for (let xn = -xN; xn <= xN; xn++) {
+      for (let yn = -yN; yn <= yN; yn++) {
+        let x = xIntersection + xn * bgLineSpacing / camZoom;
+        let y = yIntersection + yn * bgLineSpacing / camZoom;
+        c.beginPath();
+        c.lineWidth = .5 / camZoom;
+        c.strokeStyle = 'hsla(0,0%,30%,.3)';
+        //horizontal
+        c.moveTo(0, y);
+        c.lineTo(WIDTH, y);
+        //vertical
+        c.moveTo(x, 0);
+        c.lineTo(x, HEIGHT);
+        c.stroke();
+      }
+    }
+
+  },
   drawWorldBorder: () => {
     c.beginPath();
     c.lineWidth = 20 / camZoom;
@@ -191,7 +242,6 @@ var prevtime;
 var starttime;
 var currtime;
 let newFrame = (timestamp) => {
-  console.log(camZoom);
   if (starttime === undefined) {
     starttime = timestamp;
     prevtime = timestamp;
@@ -204,12 +254,14 @@ let newFrame = (timestamp) => {
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
 
-  //camera:
-  camLoc = players[socket.id].loc;
+  //update camera:
+  playerCamera.update(players[socket.id].loc, dt);
+
   //render:
-
-
   c.clearRect(0, 0, WIDTH, HEIGHT);
+
+  //draw BG:
+  playerCamera.drawBG();
 
   //draw holes:
   for (let hlid in world.holes) {
@@ -255,6 +307,9 @@ document.addEventListener('keydown', function (event) {
       case "resethooks":
         send.resethooks();
         break;
+      case "resetzoom":
+        camZoomIsResetting = true;
+        break;
     }
 
   }
@@ -291,15 +346,25 @@ document.addEventListener('mousedown', function (event) {
   }
 });
 
+const zoomMin = 1 / 100;
+const zoomMax = 100;
+const dYPercent = 1 / 1000;
 document.addEventListener('wheel', event => {
-  let dZoom = event.deltaY / 1000;
-  if (camZoom + dZoom > 0) {
-    camZoom += dZoom;
+  if (camZoomIsResetting) return;
+  let dZoom = 1 + (event.deltaY * dYPercent);
+  let newZoom = camZoom * dZoom;
+  if (newZoom < zoomMin) {
+    camZoom = zoomMin;
+  } else if (newZoom > zoomMax) {
+    camZoom = zoomMax;
+  } else {
+    camZoom *= dZoom;
   }
 });
 
-//anti right-click
+//anti right-click and middle click
 document.addEventListener('contextmenu', event => event.preventDefault());
+document.onmousedown = function (e) { if (e.button === 1) return false; }
 
 window.addEventListener('resize', () => {
   updateCanvasSize();
@@ -309,15 +374,10 @@ window.addEventListener('resize', () => {
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (serverPlayers, serverHooks, serverWorld, pRad, hRad_out, hRad_in, mapRad) => {
+  const joinCallback = (...serverInfo) => {
     playerid = socket.id;
-    players = serverPlayers;
-    hooks = serverHooks;
-    world = serverWorld;
-    playerRadius = pRad;
-    hookRadius_outer = hRad_out;
-    hookRadius_inner = hRad_in;
-    mapRadius = mapRad;
+    [players, hooks, world, playerRadius, hookRadius_outer,
+      hookRadius_inner, mapRadius] = serverInfo;
   };
   await send.join(joinCallback);
 

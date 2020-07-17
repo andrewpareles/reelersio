@@ -16,57 +16,50 @@ const { vec } = require('../common/vector.js');
 const WAIT_TIME = 8; // # ms to wait to re-render & broadcast players object
 
 const mapRadius = 2000;
-
 const playerRadius = 40; //pix
-const walkspeed = 225 / 1000; // pix/ms
-const walkspeed_hooked = 100 / 1000; // pix/ms
-
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
 const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook radius (square radius, not along diagonal) (PURELY COSMETIC)
 
-const boostMultEffective_max = 1;
-const boostMult_max = 3;
-
-const kb_minspeed = 124 / 1000;
-const kb_maxspeed = 250 / 1000;
+const hookCutoffDistance = 1000; //based on center of player and center of hook
+const maxHooksOut = 2; //per player
+const throw_cooldown = 100; //ms
+const reel_cooldown = 1.7 * 1000;
+const nofriction_timeout = .25 * 1000;
 const knockback_timeout = .3 * 1000;
 
-const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
+const walkspeed = 225 / 1000; // pix/ms
+const walkspeed_hooked = 100 / 1000; // pix/ms
 
-const a0 = 1 / (160 * 16); // boost decay v^2 term
-const b0 = 1 / (80 * 16); // boost decay constant term
-const c0 = 1 / (37.5 * 16); // c / (boostMult + d) term
+const boostMultEffective_max = 1;
+const boostMult_max = 1.5;
+const a0 = 1 / (80 * 16); // boost decay v^2 term
+const b0 = 1 / (2 * 80 * 16); // boost decay constant term
+const c0 = 1 / (2 * 37.5 * 16); // c / (boostMult + d) term
 const d0 = 1 / (.5 * 16);
 // ^ Solution to dv/dt = -m(a v^2 + b + c / (v + d)) (if that's < 0, then 0)
 // v0 = init boost vel, t = time since boost started
 
-const hookspeed_max = playerVel_max + 50 / 1000;
-const hookspeed_min = 400 / 1000;
-const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
+const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const hookspeed_reset = 800 / 1000;
-
-const hookspeedreel_min = 300 / 1000; //230 / 1000;
-const hookspeedreel_max = 335 / 1000; //280 / 1000;
-const reel_cooldown = 1.7 * 1000;
-const nofriction_timeout = .25 * 1000;
-
-const throw_cooldown = 100; //ms
-
-const maxHooksOut = 2; //per player
-const hookCutoffDistance = 1000; //based on center of player and center of hook
-
-// constant decay of reeling in player
-const a0h = 1 / (160 * 16); // v^2 term
-const b0h = 1 / (1000 * 16);
-const c0h = 1 / (30 * 16); // c / (speedMult + d) term
-const d0h = 1 / (.015 * 16);
-
-//constant decay of knockback
+const kb_minspeed = 124 / 1000;
+const kb_maxspeed = 250 / 1000;
 const a0k = 4 * 1 / (160 * 16);
 const b0k = 4 * 1 / (1000 * 16);
 const c0k = 2 * 1 / (30 * 16);
 const d0k = 1 / (.015 * 16);
+
+const hookspeed_max = 2 * playerVel_max + 50 / 1000;
+const hookspeed_min = playerVel_max;
+const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
+
+const hookspeed_reset = 1500 / 1000;
+
+const hookspeedreel_min = 400 / 1000; //230 / 1000;
+const hookspeedreel_max = 420 / 1000; //280 / 1000;
+const a0h = 1 / (160 * 16); // v^2 term
+const b0h = 1 / (1000 * 16);
+const c0h = 1 / (30 * 16); // c / (speedMult + d) term
+const d0h = 1 / (.015 * 16);
 
 /** ---------- PLAYER COLORS ---------- */
 var generateColorPalette = () => {
@@ -102,10 +95,7 @@ var generateColorPalette = () => {
 
   let special = [
     ['hsl(0, 0%, 90%)', 'hsl(0, 0%, 90%)', 'hsl(0, 0%, 70%)', '#c2a500'],
-    ['#c2a500', '#c2a500', '#c2a500', '#fb3254'],
-    ['#fb3254', '#fb3254', '#fb3254', '#e732fb'],
     ['hsl(180, 100%, 70%)', 'hsl(180, 100%, 70%)', 'hsl(180, 100%, 70%)', '#e732fb'],
-    ['#e732fb', '#e732fb', '#e732fb', 'hsl(180, 100%, 70%)'],
   ]
 
   return palette.concat(special);
@@ -138,6 +128,9 @@ const playerHookColorPalette = generateColorPalette();
 //rendering fixes when zoom 
 // better aiming (SHIFTING)
 // boost fix (is it broken? decays instantly)
+// player walking into wall has 0 velocity
+// server sends to a player every ping length
+
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -426,7 +419,7 @@ var walk_updateOnRelease = (pInfo, dir) => {
   }
 }
 
-var boost_velocity_decay = (pInfo, dt) => {
+var boost_decay = (pInfo, dt) => {
   //boost decay
   if (pInfo.boost.Dir) {
     pInfo.boost.Multiplier -= dt * (a0 * Math.pow(pInfo.boost.Multiplier, 2) + b0 + c0 / (pInfo.boost.Multiplier + d0));
@@ -917,10 +910,6 @@ io.on('connection', (socket) => {
 
 });
 
-let a = 0;
-
-
-
 
 // ---------- RUN GAME (socket calls do the updating, this just runs it) ----------
 // 1. update positions based on previous info
@@ -945,8 +934,8 @@ const runGame = () => {
       nofriction_timeout_decay(h, dt);
     else if (h.isResetting) //h.reelingPlayer will never be true when h.isResetting, since reelingPlayer requries h.to and resetting requires !h.to
       hook_reset_velocity_update(h);
-    
-    if (h.vel){
+
+    if (h.vel) {
       // h.vel = vec.normalized(vec.add(vec.normalized(players[h.from].vel, 1/1000), vec.normalized(h.vel)), vec.magnitude(h.vel));
       h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
     }
@@ -961,7 +950,7 @@ const runGame = () => {
     reel_cooldown_decay(pInfo, dt);
     throw_cooldown_decay(pInfo, dt);
     // boost decay & kb decay & update velocity
-    boost_velocity_decay(pInfo, dt);
+    boost_decay(pInfo, dt);
     if (pInfo.knockback.dir) knockback_timeout_decay(pInfo, dt);
     player_velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location (even if hooked, lets player walk within hook bubble)
