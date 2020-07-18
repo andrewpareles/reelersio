@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-const ADDRESS = 'http://192.168.1.204:3001';
-// const ADDRESS = 'https://trussbucket.herokuapp.com/';
+// const ADDRESS = 'http://192.168.1.204:3001';
+const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -72,7 +72,7 @@ var keyDirections = {
 }
 var keyActions = {
   'r': "resethooks",
-  'z': "resetzoom",
+  'c': "resetzoom",
   '/': "chat",
 }
 
@@ -112,8 +112,8 @@ const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
 const bgLineSpacing = 600;
 const bgLineWidth = .5;
 const bgLineWidthBold = 1;
-const bgNumDivisions = 4;
-const bgMaxLines = 4;
+const bgNumDivisions = 10;
+const bgMaxLines = bgNumDivisions; //max num bold lines you see on a screen
 
 //log_n(m)
 const logn = (n, m) => {
