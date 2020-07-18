@@ -110,8 +110,8 @@ var camZoomIsResetting = false;
 
 const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
 const bgLineSpacing = 600;
-const bgLineWidth = 1;
-const bgLineWidthBold = 3;
+const bgLineWidth = .5;
+const bgLineWidthBold = 1;
 const bgNumDivisions = 4;
 const bgMaxLines = 4;
 
@@ -191,14 +191,6 @@ var playerCamera = {
     //gets camera location's bottom location mod spacing * numDivisions (add this to camera to get aligned spacing; numDivisions so can just count to bolden every bgNumDivision)
     let camLocModSpacing = vec.apply(camLoc, positiveMod, add * bgLineSpacing);
     let intersectionModLoc = getPosOnScreen(vec.sub(camLoc, camLocModSpacing));
-
-
-    c.beginPath();
-    c.lineWidth = 10;
-    c.strokeStyle = 'green';
-    c.moveTo(midScreen.x, -midScreen.y);
-    c.lineTo(intersectionModLoc.x, intersectionModLoc.y);
-    c.stroke();
 
     let inc = add * bgLineSpacing / (camZoom * bgNumDivisions);
     drawBGLinesAlongCoord(true, intersectionModLoc.x, WIDTH, inc, false);
