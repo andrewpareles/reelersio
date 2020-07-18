@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -18,7 +18,6 @@ var playerRadius = null;
 var hookRadius_outer = null;
 var hookRadius_inner = null;
 var mapRadius = null;
-var maxHooks = null;
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -110,9 +109,16 @@ var camLoc = null; //camera location in world
 var camZoomIsResetting = false;
 
 const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
-const bgLineSpacing = 500;
-const bgLineWidth = .1;
+const bgLineSpacing = 600;
+const bgLineWidth = 1;
+const bgLineWidthBold = 3;
+const bgNumDivisions = 4;
 const bgMaxLines = 4;
+
+//log_n(m)
+const logn = (n, m) => {
+  return Math.log(m) / Math.log(n);
+}
 
 const positiveMod = (n, m) => {
   if (n < 0) return ((n % m) + m) % m;
@@ -126,18 +132,40 @@ var getPosOnScreen = (locInWorld) => {
   return { x: posWithNegY.x, y: -posWithNegY.y };
 }
 
-var drawIntersection = ({ x, y }) => {
+// make sure start is the intersection to start bolding!! start, end, inc are all in corrds of screen
+//inclusive of both start and end unless excludeStart==true, then exclude start
+// if x=true then draw all appropriate vertical lines using x coord, else horiz w/ y coord
+const drawVerticalLine = (x, lineWidth) => {
   c.beginPath();
-  c.lineWidth = bgLineWidth;
   c.strokeStyle = 'hsla(0,0%,30%,.3)';
-  //horizontal
-  c.moveTo(0, y);
-  c.lineTo(WIDTH, y);
-  //vertical
+  c.lineWidth = lineWidth;
   c.moveTo(x, 0);
   c.lineTo(x, HEIGHT);
   c.stroke();
+};
+const drawHorizontalLine = (y, lineWidth) => {
+  c.beginPath();
+  c.strokeStyle = 'hsla(0,0%,30%,.3)';
+  c.lineWidth = lineWidth;
+  c.moveTo(0, y);
+  c.lineTo(WIDTH, y);
+  c.stroke();
+};
+var drawBGLinesAlongCoord = (isX, start, end, inc, excludeStart) => {
+  let count = 0;
+  if (excludeStart) {
+    count++;
+    start += inc;
+  }
+  let fn = isX ? drawVerticalLine : drawHorizontalLine;
+  for (let coord = start; inc > 0 ? coord <= end : coord >= end; coord += inc) {
+    let lineWidth = count % bgNumDivisions === 0 ? bgLineWidthBold : bgLineWidth;
+    fn(coord, lineWidth);
+    count++;
+  }
 }
+
+
 var playerCamera = {
   update: (newCamLoc, dt) => {
     camLoc = newCamLoc;
@@ -158,31 +186,25 @@ var playerCamera = {
     }
   },
   drawBG: () => {
-    let xN = Math.ceil((WIDTH / 2) * camZoom / bgLineSpacing); //num times to draw in half a screen
-    let yN = Math.ceil((HEIGHT / 2) * camZoom / bgLineSpacing);
-    let add = Math.pow(2, Math.ceil(Math.log2(Math.min(xN, yN) / bgMaxLines)));//draw every other nth line, where n = add
-    let camLocModSpacing = {
-      x: positiveMod(camLoc.x, add * bgLineSpacing),
-      y: positiveMod(camLoc.y, add * bgLineSpacing),
-    };
-    let s = 0;
-    let intersectionLoc = getPosOnScreen(vec.sub(camLoc, camLocModSpacing));
-    for (let xn = 0; xn <= xN; xn += add) {
-      for (let yn = 0; yn <= yN; yn += add) {
-        s++;
-        drawIntersection({
-          x: intersectionLoc.x + xn * bgLineSpacing / camZoom,
-          y: intersectionLoc.y + yn * bgLineSpacing / camZoom,
-        });
-        if (xn !== 0 && yn !== 0) {
-          drawIntersection({
-            x: intersectionLoc.x - xn * bgLineSpacing / camZoom,
-            y: intersectionLoc.y - yn * bgLineSpacing / camZoom,
-          });
-        }
-      }
-    }
-    console.log(s);
+    //draw every other nth line, where n = add, bolding every bgNumDivisions_th line
+    let add = Math.pow(bgNumDivisions, Math.ceil(logn(bgNumDivisions, Math.ceil(Math.max(WIDTH, HEIGHT) * camZoom / bgLineSpacing) / bgMaxLines)));
+    //gets camera location's bottom location mod spacing * numDivisions (add this to camera to get aligned spacing; numDivisions so can just count to bolden every bgNumDivision)
+    let camLocModSpacing = vec.apply(camLoc, positiveMod, add * bgLineSpacing);
+    let intersectionModLoc = getPosOnScreen(vec.sub(camLoc, camLocModSpacing));
+
+
+    c.beginPath();
+    c.lineWidth = 10;
+    c.strokeStyle = 'green';
+    c.moveTo(midScreen.x, -midScreen.y);
+    c.lineTo(intersectionModLoc.x, intersectionModLoc.y);
+    c.stroke();
+
+    let inc = add * bgLineSpacing / (camZoom * bgNumDivisions);
+    drawBGLinesAlongCoord(true, intersectionModLoc.x, WIDTH, inc, false);
+    drawBGLinesAlongCoord(true, intersectionModLoc.x, 0, -inc, true);
+    drawBGLinesAlongCoord(false, intersectionModLoc.y, HEIGHT, inc, false);
+    drawBGLinesAlongCoord(false, intersectionModLoc.y, 0, -inc, true);
   },
   drawWorldBorder: () => {
     c.beginPath();

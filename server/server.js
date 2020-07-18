@@ -15,7 +15,8 @@ const { vec } = require('../common/vector.js');
 
 const WAIT_TIME = 8; // # ms to wait to re-render & broadcast players object
 
-const mapRadius = 2000;
+const numHoles = 500;
+const mapRadius = 5000;
 const playerRadius = 40; //pix
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
 const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook radius (square radius, not along diagonal) (PURELY COSMETIC)
@@ -41,15 +42,15 @@ const d0 = 1 / (.5 * 16);
 
 const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const kb_minspeed = 124 / 1000;
-const kb_maxspeed = 250 / 1000;
+const kb_minspeed = 300 / 1000;
+const kb_maxspeed = 400 / 1000;
 const a0k = 4 * 1 / (160 * 16);
 const b0k = 4 * 1 / (1000 * 16);
 const c0k = 2 * 1 / (30 * 16);
 const d0k = 1 / (.015 * 16);
 
 const hookspeed_min = playerVel_max;
-const hookspeed_max =  hookspeed_min + 150 / 1000;
+const hookspeed_max = hookspeed_min + 150 / 1000;
 const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
@@ -60,6 +61,16 @@ const a0h = 1 / (160 * 16); // v^2 term
 const b0h = 1 / (1000 * 16);
 const c0h = 1 / (30 * 16); // c / (speedMult + d) term
 const d0h = 1 / (.015 * 16);
+
+
+const generateRandomLoc = () => {
+  let r = Math.sqrt(Math.random()) * mapRadius; //see CDF math in notebook
+  let theta = Math.random() * 2 * Math.PI;
+  let pos = { x: r * Math.cos(theta), y: -r * Math.sin(theta) };
+  return pos;
+  // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
+}
+
 
 /** ---------- PLAYER COLORS ---------- */
 var generateColorPalette = () => {
@@ -136,7 +147,7 @@ const playerHookColorPalette = generateColorPalette();
 var players = {
   /*
     "initialPlayer (socket.id)": {
-      loc: { x: 0, y: 0 },//generateStartingLocation(),
+      loc:...,
       vel: { x: 0, y: 0 },
 
       username: "billybob",
@@ -225,35 +236,30 @@ Hook invariants:
   hook loc = !vel? to.loc : hook.loc
 
  */
-
-var world = {
-  holes: {
+var generateHoles = () => {
+  let holes = {};
+  for (let i = 0; i < numHoles; i++) {
+    let hlLoc = generateRandomLoc();
+    holes['hl' + i] = {
+      loc: hlLoc,
+      radius: Math.random() * 40 + playerRadius,
+      color: 'hsl(' + Math.floor(Math.random() * 360) + ', 100%, 10%)',
+    };
+  }
+  let special = {
     sparta: {
       loc: { x: 0, y: 0 },
-      radius: 150,
+      radius: 500,
       color: 'black',
     },
+  };
 
-    hl1: {
-      loc: { x: 400, y: -400 },
-      radius: 60,
-      color: 'gray',
-    },
-
-    hl2: {
-      loc: { x: 400, y: 400 },
-      radius: 60,
-      color: 'blue',
-    },
-
-    hl3: {
-      loc: { x: -400, y: -400 },
-      radius: 40,
-      color: 'orange',
-    }
-
-  }
+  return { ...special, ...holes };
+}
+var world = {
+  holes: generateHoles(),
 };
+
 
 
 
@@ -779,22 +785,14 @@ var player_delete = (pid) => {
 
 /** ---------- SOCKET CALLS & FUNCTIONS ---------- */
 
-const generateStartingLocation = () => {
-  let r = Math.random() * mapRadius;
-  let theta = Math.random() * 2 * Math.PI;
-  let pos = { x: r * Math.cos(theta), y: -r * Math.sin(theta) };
-  return pos;
-  // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
-}
-
-const generateRandomColor = () => {
+const generateRandomPlayerColor = () => {
   //get random from 
   return playerHookColorPalette[Math.floor(Math.random() * playerHookColorPalette.length)];
 }
 
 const createNewPlayerAndInfo = (username) => {
-  let startLoc = generateStartingLocation();
-  let [pCol, hCol, lineCol, bobberCol] = generateRandomColor();
+  let startLoc = generateRandomLoc();
+  let [pCol, hCol, lineCol, bobberCol] = generateRandomPlayerColor();
   return [
     {// PLAYER:
       loc: startLoc,

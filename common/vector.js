@@ -67,6 +67,10 @@ const average = (...vecs) => {
   return scalar(add(...vecs), 1 / vecs.length);
 }
 
+const apply = (vec, fn, ...args) => {
+  return { x: fn(vec.x, ...args), y: fn(vec.y, ...args) };
+}
+
 
 
 exports.vec = {
@@ -82,5 +86,6 @@ exports.vec = {
   isCollided: isCollided,
   isContaining: isContaining,
   average: average,
+  apply: apply,
 
 }
