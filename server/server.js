@@ -988,7 +988,7 @@ const runGame = () => {
       continue;
     }
     // --- UPDATE LOC OF HOOKS FOLLOWING A PLAYER --- 
-    if (!h.vel) {
+    if (!h.vel) { //aka h.to
       let p = players[h.to]; //guaranteed to exist since !h.vel
       // if h.to doesn't contain hook anymore, project hook onto h.to
       if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
@@ -998,7 +998,7 @@ const runGame = () => {
       // if following, then h.to, so don't care about collisions, already hooked
       continue;
     }
-    // --- HANDLE COLLISIONS ---
+    // --- HANDLE COLLISIONS OF HOOKS NOT YET ATTACHED (!h.to) ---
     hooksTakenCareOf.clear(); //ensures two players dont try to delete the same hook
     for (let pid in players) { //pid = player to be hooked
       //player has exited hook, so remove it from waitTillExit

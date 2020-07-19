@@ -72,7 +72,8 @@ var keyDirections = {
 }
 var keyActions = {
   'r': "resethooks",
-  'z': "resetzoom",
+  't': "resetzoom",
+  'shift': "aiming",
   '/': "chat",
 }
 
@@ -111,9 +112,9 @@ var camZoomIsResetting = false;
 const camZoomResetMult = 1 / 100; //percent (out of 1) per ms
 const bgLineSpacing = 600;
 const bgLineWidth = .5;
-const bgLineWidthBold = 1;
-const bgNumDivisions = 4;
-const bgMaxLines = 4;
+const bgLineWidthBold = .7;
+const bgNumDivisions = 8;
+const bgMaxLines = bgNumDivisions; //max num bold lines you see on a screen
 
 //log_n(m)
 const logn = (n, m) => {
@@ -342,6 +343,9 @@ document.addEventListener('keydown', function (event) {
         break;
       case "resetzoom":
         camZoomIsResetting = true;
+        break;
+      case "aiming":
+        console.log('aiming')
         break;
     }
 
