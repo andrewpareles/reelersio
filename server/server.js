@@ -24,9 +24,9 @@ const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook ra
 const hookCutoffDistance = 1000; //based on center of player and center of hook
 const maxHooksOut = 2; //per player
 const throw_cooldown = 100; //ms
-const reel_cooldown = 1.7 * 1000;
-const nofriction_timeout = .25 * 1000;
-const knockback_timeout = .3 * 1000;
+const reel_cooldown = 1.5 * 1000;
+const reel_nofriction_timeout = .3 * 1000;
+const knockback_nofriction_timeout = .3 * 1000;
 
 const walkspeed = 225 / 1000; // pix/ms
 const walkspeed_hooked = 100 / 1000; // pix/ms
@@ -42,13 +42,6 @@ const d0 = 1 / (.5 * 16);
 
 const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const kb_minspeed = 300 / 1000;
-const kb_maxspeed = 400 / 1000;
-const a0k = 4 * 1 / (160 * 16);
-const b0k = 4 * 1 / (1000 * 16);
-const c0k = 2 * 1 / (30 * 16);
-const d0k = 1 / (.015 * 16);
-
 const hookspeed_min = playerVel_max;
 const hookspeed_max = hookspeed_min + 150 / 1000;
 const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
@@ -57,11 +50,17 @@ const hookspeed_reset = 1500 / 1000;
 
 const hookspeedreel_min = 400 / 1000; //230 / 1000;
 const hookspeedreel_max = 420 / 1000; //280 / 1000;
-const a0h = 1 / (160 * 16); // v^2 term
-const b0h = 1 / (1000 * 16);
+const a0h = 1 / (80 * 16); // v^2 term
+const b0h = 1 / (100 * 16);
 const c0h = 1 / (30 * 16); // c / (speedMult + d) term
 const d0h = 1 / (.015 * 16);
 
+const knockbackspeed_min = 300 / 1000; // only for one engagement-- multiple kbs can combine to make speeds bigger or smaller than this
+const knockbackspeed_max = 400 / 1000;
+const a0k = 4 * 1 / (160 * 16);
+const b0k = 4 * 1 / (1000 * 16);
+const c0k = 2 * 1 / (30 * 16);
+const d0k = 1 / (.015 * 16);
 
 const generateRandomLoc = () => {
   let r = Math.sqrt(Math.random()) * mapRadius; //see CDF math in notebook
@@ -136,12 +135,11 @@ const playerHookColorPalette = generateColorPalette();
 //left click again deletes hook that's out
 // right clicking always reels unattached player
 //conservation of energy of knockback
-//rendering fixes when zoom 
 // better aiming (SHIFTING)
 // boost fix (is it broken? decays instantly)
 // player walking into wall has 0 velocity
 // server sends to a player every ping length
-
+// better aiming when reeling hook by reeling towards player, and in player movement dir when orthogonal to player direction (h.vel = p.vel orthogonal to p.loc-h.loc)
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -455,12 +453,12 @@ var player_velocity_update = (pInfo, p, followHook) => {
 /** ---------- KNOCKBACK FUNCTIONS ---------- */
 // pid of player being kb'd, hid of hook knocking back player
 var knockbackAdd = (hid, pid) => {
-  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, kb_minspeed, kb_maxspeed, hookspeed_max);
   let kbVel;
-  let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
+  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, knockbackspeed_min, knockbackspeed_max, hookspeed_max);
   //if hook is headed towards player (ie NOT FAR INSIDE PLAYER), incorporate pool ball effect:
+  let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
   if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) {
-    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, kb_minspeed, kb_maxspeed, hookspeed_max);
+    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max, hookspeed_max);
     kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);
   } else { //just hook vel:
     kbVel = kbFromHookVel;
@@ -468,11 +466,14 @@ var knockbackAdd = (hid, pid) => {
 
   let pInfo = playersInfo[pid];
   if (pInfo.knockback.dir) { //add onto previous kb
-    kbVel = vec.add(vec.normalized(pInfo.knockback.dir, pInfo.knockback.speed), kbVel);
+    kbVel = vec.add(kbVel, vec.scalar(pInfo.knockback.dir, pInfo.knockback.speed));
   }
+  // subtract pVel since kb is relative to player (or else kb is way too big)
+  kbVel = vec.sub(kbVel, players[pid].vel);
+
   pInfo.knockback.dir = vec.normalized(kbVel);
   pInfo.knockback.speed = vec.magnitude(kbVel);
-  pInfo.knockback.timeremaining = knockback_timeout;
+  pInfo.knockback.timeremaining = knockback_nofriction_timeout;
 }
 
 var knockbackReset = (pInfo) => {
@@ -546,7 +547,7 @@ var hookStartReelingPlayer = (pid_hookowner, hid, reelVel) => {
   playersInfo[h.to].hooks.followHook = hid;
   h.reelingPlayer = pid_hookowner;
   h.vel = reelVel;
-  h.nofriction_timeout = nofriction_timeout;
+  h.nofriction_timeout = reel_nofriction_timeout;
 }
 
 // h, WHICH HAS A PLAYER ATTACHED, stops getting reeled (**assumes h.to**)
@@ -757,7 +758,10 @@ var player_create = (pid, username) => {
   if (playersInfo[pid]) console.error('playersInfo already exists when joining', pid)
   players[pid] = newPlayer;
   playersInfo[pid] = newPlayerInfo;
-  // console.log("players:", players);
+  //TODO REMOVE!!!! dupe player for testing
+  [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
+  players['abc'] = newPlayer;
+  playersInfo['abc'] = newPlayerInfo;
   // console.log("hooks:", hooks);
 }
 
@@ -790,7 +794,7 @@ const generateRandomPlayerColor = () => {
   return playerHookColorPalette[Math.floor(Math.random() * playerHookColorPalette.length)];
 }
 
-const createNewPlayerAndInfo = (username) => {
+const createNewPlayerAndInfo = (username, pOptions = {}, pInfoOptions = {}) => {
   let startLoc = generateRandomLoc();
   let [pCol, hCol, lineCol, bobberCol] = generateRandomPlayerColor();
   return [
@@ -799,6 +803,7 @@ const createNewPlayerAndInfo = (username) => {
       vel: { x: 0, y: 0 },
       username: username,
       color: pCol,
+      ...pOptions,
     },
     // PLAYER INFO:
     {//NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
@@ -827,7 +832,8 @@ const createNewPlayerAndInfo = (username) => {
         speed: null,
         dir: null,
         timeremaining: null,
-      }
+      },
+      ...pInfoOptions,
     }
   ]
 }
