@@ -44,8 +44,8 @@ const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
 const aimingspeed = 100 / 1000;
 
-const hookspeed_min = playerVel_max;
-const hookspeed_max = playerVel_max;
+const hookspeed_min = 500;
+const hookspeed_max = 500;
 const hookspeed_hooked = hookspeed_max + 300 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
