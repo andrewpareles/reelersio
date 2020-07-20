@@ -156,7 +156,7 @@ const playerHookColorPalette = generateColorPalette();
 // player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
 // fix backwards kb
 // fix aiming for hooked players (so it's way faster and more controlled), and resetting hooks
-// HOOKSTAKENCAREOF
+// HOOKSTAKENCAREOF - what the hell changed that broke it?
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
