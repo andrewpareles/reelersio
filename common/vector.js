@@ -72,7 +72,6 @@ const apply = (vec, fn, ...args) => {
 }
 
 const crossMagnitude = (a, b) => {
-  if (!a || !b) return 0;
   return a.x * b.y - a.y * b.x;
 }
 
