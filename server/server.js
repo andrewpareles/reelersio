@@ -156,7 +156,7 @@ const playerHookColorPalette = generateColorPalette();
 // player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
 // fix backwards kb
 // fix aiming for hooked players (so it's way faster and more controlled), and resetting hooks
-
+// HOOKSTAKENCAREOF
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -525,6 +525,37 @@ var knockback_timeout_decay = (pInfo, dt) => {
     knockbackReset(pInfo);
   }
 }
+
+/** ---------- AIMING FUNCTIONS ---------- */
+var hook_aiming_get_velocity = (h) => {
+  let pVel = players[h.from].vel;
+  if (vec.magnitude(pVel) === 0) return vec.zero;
+
+  let PtoH = vec.sub(h.loc, players[h.from].loc);
+  if (vec.magnitude(PtoH) === 0) return vec.zero;
+
+  // hook vel += aimingspeed * (player vel - player vel in direction of reel)
+  let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
+  //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
+  let sinTheta = vec.crossMagnitude(PtoH, pVel) / (vec.magnitude(PtoH) * vec.magnitude(pVel));
+  sinTheta = Math.abs(sinTheta);
+  return vec.normalized(pVelOrthogonalToReel, sinTheta * vec.magnitude(pVel));
+}
+
+var aimingStart = (pid) => {
+  playersInfo[pid].hooks.isAiming = true;
+}
+
+var aimingStop = (pid) => {
+  let pInfo = playersInfo[pid];
+  for (let hid of pInfo.hooks.owned) {
+    let h = hooks[hid];
+    if (!h.to)
+      h.vel = vec.normalized(vec.add(h.vel, hook_aiming_get_velocity(h)), vec.magnitude(h.vel));
+  }
+  pInfo.hooks.isAiming = false;
+}
+
 /** ---------- HOOK FUNCTIONS ----------  */
 var getOwned = (pid_from) => {
   return playersInfo[pid_from].hooks.owned;
@@ -598,7 +629,8 @@ var createNewHook = (pid_from, throwDir) => {
 // should call hook_reset_init before running this...
 var hook_reset_velocity_update = (h) => {
   let reelDir = vec.sub(players[h.from].loc, h.loc);
-  h.vel = vec.normalized(reelDir, hookspeed_reset);//projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeed_reset, hookspeed_reset + playerVel_max);
+  h.vel = vec.add(hook_aiming_get_velocity(h),
+    vec.normalized(reelDir, hookspeed_reset));
 }
 
 // no need to call hook_detach before running this!!
@@ -758,36 +790,6 @@ var reel_nofriction_timeout_decay = (h, dt) => {
   }
 }
 
-
-var hook_aiming_get_velocity = (h) => {
-  let pVel = players[h.from].vel;
-  if (vec.magnitude(pVel) === 0) return vec.zero;
-
-  let PtoH = vec.sub(h.loc, players[h.from].loc);
-  if (vec.magnitude(PtoH) === 0) return vec.zero;
-
-  // hook vel += aimingspeed * (player vel - player vel in direction of reel)
-  let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
-  //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
-  let sinTheta = vec.crossMagnitude(PtoH, pVel) / (vec.magnitude(PtoH) * vec.magnitude(pVel));
-  sinTheta = Math.abs(sinTheta);
-  return vec.normalized(pVelOrthogonalToReel, sinTheta * vec.magnitude(pVel));
-}
-/** ---------- AIMING FUNCTIONS ---------- */
-var aimingStart = (pid) => {
-  playersInfo[pid].hooks.isAiming = true;
-}
-
-var aimingStop = (pid) => {
-  let pInfo = playersInfo[pid];
-  for (let hid of pInfo.hooks.owned) {
-    let h = hooks[hid];
-    if (!h.to)
-      h.vel = vec.normalized(vec.add(h.vel, hook_aiming_get_velocity(h)), vec.magnitude(h.vel));
-  }
-  pInfo.hooks.isAiming = false;
-}
-
 /** ---------- EVENT HELPERS ---------- */
 var player_create = (pid, username) => {
   let [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username);
@@ -796,9 +798,9 @@ var player_create = (pid, username) => {
   players[pid] = newPlayer;
   playersInfo[pid] = newPlayerInfo;
   //TODO REMOVE!!!! dummy player for testing
-  // [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
-  // players['abc'] = newPlayer;
-  // playersInfo['abc'] = newPlayerInfo;
+  [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
+  players['abc'] = newPlayer;
+  playersInfo['abc'] = newPlayerInfo;
   // console.log("hooks:", hooks);
 }
 
@@ -1041,36 +1043,41 @@ const runGame = () => {
 
   // update all hooks following a player now that players have moved and velocities are updated
   // also update all hook info based on player collisions
+  hooksTakenCareOf.clear(); //ensures two players dont try to delete the same hook, etc
   for (let hid in hooks) {
+    //do nothing if this hook already had something done to it
+    if (hooksTakenCareOf.has(hid)) {
+      continue;
+    }
     let h = hooks[hid];
     // --- RESET HOOK IF TOO FAR --- 
     // if hook is too far, reset it
     if (!vec.isContaining(players[h.from].loc, h.loc, hookCutoffDistance, 0)) {
       hookResetInit(hid, false);
+      hooksTakenCareOf.add(hid);
       continue;
     }
     // --- UPDATE LOC OF HOOKS FOLLOWING A PLAYER --- 
     if (!h.vel) { //aka h.to
       let p = players[h.to]; //guaranteed to exist since !h.vel
       // if h.to doesn't contain hook anymore, project hook onto h.to
+      console.log('players,', players)
+      console.log('hooks,', hooks)
+      console.log('h.to', h.to)
       if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
         let ptoh = vec.sub(h.loc, p.loc);
         h.loc = vec.add(p.loc, vec.normalized(ptoh, playerRadius));
       }
+      hooksTakenCareOf.add(hid);
       // if following, then h.to, so don't care about collisions, already hooked
       continue;
     }
 
     // --- HANDLE COLLISIONS OF HOOKS NOT YET ATTACHED (!h.to) ---
-    hooksTakenCareOf.clear(); //ensures two players dont try to delete the same hook
     for (let pid in players) { //pid = player to be hooked
       //player has exited hook, so remove it from waitTillExit
       if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius_outer)) {
         h.waitTillExit.delete(pid);
-      }
-      //do nothing if this hook already had something done to it due to a collision
-      else if (hooksTakenCareOf.has(hid)) {
-        continue;
       }
       // if colliding and not in waitTillExit
       else if (!h.waitTillExit.has(pid)) {
@@ -1092,6 +1099,7 @@ const runGame = () => {
 
             hookAttach(hid, pid);
             hooksTakenCareOf.add(hid);
+            console.log('oldhook and hid:', oldhook, hid);
           }
           //if two players hook each other, delete both hooks and knock each other back
           else if (getAttachedTo(pid).has(h.from)) {
