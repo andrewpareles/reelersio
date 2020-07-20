@@ -15,7 +15,7 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 8; // # ms to wait to re-render & broadcast players object
 
-const numHoles = 500;
+const numHoles = 100;
 const mapRadius = 5000;
 const playerRadius = 40; //pix
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
@@ -268,7 +268,7 @@ var generateHoles = () => {
     },
   };
 
-  return { ...special, /*...holes*/ };
+  return { ...special, ...holes };
 }
 var world = {
   holes: generateHoles(),
