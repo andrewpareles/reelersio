@@ -76,6 +76,7 @@ const crossMagnitude = (a, b) => {
   return a.x * b.y - a.y * b.x;
 }
 
+const zero = { x: 0, y: 0 };
 
 exports.vec = {
   add: add,
@@ -92,5 +93,6 @@ exports.vec = {
   average: average,
   apply: apply,
   crossMagnitude: crossMagnitude,
+  zero: zero,
 
 }

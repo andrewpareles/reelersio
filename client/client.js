@@ -80,6 +80,7 @@ var keyActions = {
   'r': "resethooks",
   'c': "resetzoom",
   'shift': "aiming",
+  '1': "aiming",
   '/': "chat",
 }
 

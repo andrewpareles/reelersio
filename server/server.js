@@ -757,19 +757,19 @@ var reel_nofriction_timeout_decay = (h, dt) => {
 }
 
 
-var hook_aiming_location_update = (h, dt) => {
+var hook_aiming_get_velocity = (h) => {
   let pVel = players[h.from].vel;
-  if (vec.magnitude(pVel) === 0) return;
+  if (vec.magnitude(pVel) === 0) return vec.zero;
 
   let PtoH = vec.sub(h.loc, players[h.from].loc);
-  if (vec.magnitude(PtoH) === 0) return;
-
+  if (vec.magnitude(PtoH) === 0) return vec.zero;
+  
   // hook vel += aimingspeed * (player vel - player vel in direction of reel)
   let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
   //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
   let sinTheta = vec.crossMagnitude(PtoH, pVel) / (vec.magnitude(PtoH) * vec.magnitude(pVel));
   sinTheta = Math.abs(sinTheta);
-  h.loc = vec.add(h.loc, vec.normalized(pVelOrthogonalToReel, dt * sinTheta * vec.magnitude(pVel)));
+  return vec.normalized(pVelOrthogonalToReel, sinTheta * vec.magnitude(pVel));
 }
 /** ---------- AIMING FUNCTIONS ---------- */
 var aimingStart = (pid) => {
@@ -777,7 +777,13 @@ var aimingStart = (pid) => {
 }
 
 var aimingStop = (pid) => {
-  playersInfo[pid].hooks.isAiming = false;
+  let pInfo = playersInfo[pid];
+  for (let hid of pInfo.hooks.owned) {
+    let h = hooks[hid];
+    if (!h.to)
+      h.vel = vec.normalized(vec.add(h.vel, hook_aiming_get_velocity(h)), vec.magnitude(h.vel));
+  }
+  pInfo.hooks.isAiming = false;
 }
 
 /** ---------- EVENT HELPERS ---------- */
@@ -943,7 +949,7 @@ io.on('connection', (socket) => {
   socket.on('startaiming', () => {
     aimingStart(socket.id);
   });
-  
+
   socket.on('stopaiming', () => {
     aimingStop(socket.id);
   });
@@ -1025,7 +1031,7 @@ const runGame = () => {
       for (let hid of pInfo.hooks.owned) {
         let h = hooks[hid];
         if (!h.to)
-          hook_aiming_location_update(h, dt);
+          h.loc = vec.add(h.loc, vec.scalar(hook_aiming_get_velocity(h), dt));
       }
     }
   }
