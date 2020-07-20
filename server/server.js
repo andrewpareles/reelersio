@@ -795,10 +795,10 @@ var player_create = (pid, username) => {
   if (playersInfo[pid]) console.error('playersInfo already exists when joining', pid)
   players[pid] = newPlayer;
   playersInfo[pid] = newPlayerInfo;
-  //TODO REMOVE!!!! dupe player for testing
-  [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
-  players['abc'] = newPlayer;
-  playersInfo['abc'] = newPlayerInfo;
+  //TODO REMOVE!!!! dummy player for testing
+  // [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
+  // players['abc'] = newPlayer;
+  // playersInfo['abc'] = newPlayerInfo;
   // console.log("hooks:", hooks);
 }
 
