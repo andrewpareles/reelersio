@@ -71,6 +71,10 @@ const apply = (vec, fn, ...args) => {
   return { x: fn(vec.x, ...args), y: fn(vec.y, ...args) };
 }
 
+const crossMagnitude = (a, b) => {
+  if (!a || !b) return 0;
+  return a.x * b.y - a.y * b.x;
+}
 
 
 exports.vec = {
@@ -87,5 +91,6 @@ exports.vec = {
   isContaining: isContaining,
   average: average,
   apply: apply,
+  crossMagnitude: crossMagnitude,
 
 }

@@ -59,6 +59,12 @@ var send = {
   resethooks: () => {
     socket.emit('resethooks');
   },
+  startaiming: () => {
+    socket.emit('startaiming');
+  },
+  stopaiming: () => {
+    socket.emit('stopaiming');
+  },
 }
 
 
@@ -72,7 +78,7 @@ var keyDirections = {
 }
 var keyActions = {
   'r': "resethooks",
-  't': "resetzoom",
+  'c': "resetzoom",
   'shift': "aiming",
   '/': "chat",
 }
@@ -105,7 +111,8 @@ let updateCanvasSize = () => {
 //1. update camZoom and camLoc
 //2. call updateCamView()
 //3. when drawing, use getPosOnScreen.
-var camZoom = 1;
+var camZoomDefault = 1.5;
+var camZoom = camZoomDefault;
 var camLoc = null; //camera location in world
 var camZoomIsResetting = false;
 
@@ -171,16 +178,16 @@ var playerCamera = {
   update: (newCamLoc, dt) => {
     camLoc = newCamLoc;
     if (camZoomIsResetting) {
-      if (camZoom > 1) { //zoom too big
+      if (camZoom > camZoomDefault) { //zoom too big
         camZoom -= camZoom * camZoomResetMult * dt;
-        if (camZoom <= 1) {
-          camZoom = 1;
+        if (camZoom <= camZoomDefault) {
+          camZoom = camZoomDefault;
           camZoomIsResetting = false;
         }
       } else { //zoom too small
         camZoom += camZoom * camZoomResetMult * dt;
-        if (camZoom >= 1) {
-          camZoom = 1;
+        if (camZoom >= camZoomDefault) {
+          camZoom = camZoomDefault;
           camZoomIsResetting = false;
         }
       }
@@ -345,7 +352,7 @@ document.addEventListener('keydown', function (event) {
         camZoomIsResetting = true;
         break;
       case "aiming":
-        console.log('aiming')
+        send.startaiming();
         break;
     }
 
@@ -363,6 +370,15 @@ document.addEventListener('keyup', function (event) {
   if (keyDirections[key]) {
     let movementDir = keyDirections[key];
     send.stopindirection(movementDir);
+
+  } else if (keyActions[key]) {
+    let actionKey = keyActions[key];
+    switch (actionKey) {
+      case "aiming":
+        send.stopaiming();
+        break;
+    }
+
   }
 });
 

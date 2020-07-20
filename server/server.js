@@ -13,7 +13,7 @@ const server = express()
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const WAIT_TIME = 8; // # ms to wait to re-render & broadcast players object
+const GAME_UPDATE_TIME = 8; // # ms to wait to re-render & broadcast players object
 
 const numHoles = 500;
 const mapRadius = 5000;
@@ -25,7 +25,7 @@ const hookCutoffDistance = 1000; //based on center of player and center of hook
 const maxHooksOut = 2; //per player
 const throw_cooldown = 100; //ms
 const reel_cooldown = 1.5 * 1000;
-const reel_nofriction_timeout = .3 * 1000;
+const reel_nofriction_timeout = 1 * 1000//.4 * 1000;
 const knockback_nofriction_timeout = .3 * 1000;
 
 const walkspeed = 225 / 1000; // pix/ms
@@ -42,21 +42,23 @@ const d0 = 1 / (.5 * 16);
 
 const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const hookspeed_min = playerVel_max;
-const hookspeed_max = hookspeed_min + 150 / 1000;
-const hookspeed_min_hooked = hookspeed_max + 200 / 1000;
+const aimingspeed = 100 / 1000;
+
+const hookspeed_min = playerVel_max / Math.sqrt(2);
+const hookspeed_max = playerVel_max;
+const hookspeed_hooked = hookspeed_max + 300 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
 
-const hookspeedreel_min = 400 / 1000; //230 / 1000;
-const hookspeedreel_max = 420 / 1000; //280 / 1000;
+const hookspeedreel_min = walkspeed + 80 / 1000; //400 / 1000; //230 / 1000;
+const hookspeedreel_max = walkspeed + 80 / 1000;//420 / 1000; //280 / 1000;
 const a0h = 1 / (80 * 16); // v^2 term
 const b0h = 1 / (100 * 16);
 const c0h = 1 / (30 * 16); // c / (speedMult + d) term
 const d0h = 1 / (.015 * 16);
 
 const knockbackspeed_min = 300 / 1000; // only for one engagement-- multiple kbs can combine to make speeds bigger or smaller than this
-const knockbackspeed_max = 400 / 1000;
+const knockbackspeed_max = 500 / 1000;
 const a0k = 4 * 1 / (160 * 16);
 const b0k = 4 * 1 / (1000 * 16);
 const c0k = 2 * 1 / (30 * 16);
@@ -70,6 +72,17 @@ const generateRandomLoc = () => {
   // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
 }
 
+// returns qVel projected on motionVec
+// minSpeed is the minimum speed that can be returned (if it would return 0, return motionDir with speed minSpeed. same idea for maxSpeed)
+// multiplier is the multiplier for the projected velocity
+var projectedVelocityInDirection = (qVel, motionDir, minSpeed = -Infinity, maxSpeed = Infinity, multiplier = 1) => {
+  motionDir = vec.normalized(motionDir);
+  let projectedSpeed = multiplier * vec.dot(qVel, motionDir);
+  if (projectedSpeed < minSpeed) projectedSpeed = minSpeed;
+  if (projectedSpeed > maxSpeed) projectedSpeed = maxSpeed;
+  let motionVec = vec.normalized(motionDir, projectedSpeed);
+  return motionVec;
+}
 
 /** ---------- PLAYER COLORS ---------- */
 var generateColorPalette = () => {
@@ -132,14 +145,16 @@ const playerHookColorPalette = generateColorPalette();
 // hook turns red if almost too far
 // world is sent once at beginning, callback does not do anything with players or hooks
 
-//left click again deletes hook that's out
-// right clicking always reels unattached player
-//conservation of energy of knockback
 // better aiming (SHIFTING)
-// boost fix (is it broken? decays instantly)
 // player walking into wall has 0 velocity
-// server sends to a player every ping length
+// send update on a frequent interval, independent from WAIT_TIME (based on ping?)
+
+// TODO make reel cooldown = amount of time it takes for hook to stop after reeling them in (related to nofriction_timeoutf)
+// also make reel so that player doesn't have to walk back towards player theyre reeling (distance per reel > distance that player could walk in that time)
 // better aiming when reeling hook by reeling towards player, and in player movement dir when orthogonal to player direction (h.vel = p.vel orthogonal to p.loc-h.loc)
+// hookspeed = player walkspeed PLUS throw speed in that dir (ditch complicated projectedOn)
+// player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
+// fix backwards kb
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -227,6 +242,7 @@ Hook invariants:
     throw_cooldown: null, //time left till can throw again (starts from top whenever throw, resets after throw_cooldown)
     hookedBy: // pids this player is hooked by (redundant info, makes stuff faster but info is already contained in attached)
     attachedTo: // pids this player is hooking (redundant info, makes stuff faster but info is already contained in owned)
+    isAiming: false // true iff player is aiming the hooks (shift button)
     defaultColors: [hook, line, bobber] // (typically constant once initialized) the default colors of throwing a hook 
   }
 
@@ -252,7 +268,7 @@ var generateHoles = () => {
     },
   };
 
-  return { ...special, ...holes };
+  return { ...special, /*...holes*/ };
 }
 var world = {
   holes: generateHoles(),
@@ -454,11 +470,11 @@ var player_velocity_update = (pInfo, p, followHook) => {
 // pid of player being kb'd, hid of hook knocking back player
 var knockbackAdd = (hid, pid) => {
   let kbVel;
-  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, knockbackspeed_min, knockbackspeed_max, hookspeed_max);
+  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, knockbackspeed_min, knockbackspeed_max);
   //if hook is headed towards player (ie NOT FAR INSIDE PLAYER), incorporate pool ball effect:
   let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
-  if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) {
-    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max, hookspeed_max);
+  if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) { //ignores case where hookToKbPlayer = {0,0}
+    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max);
     kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);
   } else { //just hook vel:
     kbVel = kbFromHookVel;
@@ -508,17 +524,6 @@ var knockback_timeout_decay = (pInfo, dt) => {
   }
 }
 /** ---------- HOOK FUNCTIONS ----------  */
-// velocity of qVel projected onto motionDir, where qVelMax is the maximum possible qVel
-//eg with player, velocity of player (pVel) projected onto motionDir
-var projectedVelocityInDirection = (qVel, motionDir, minspeed, maxspeed, qVelMax = playerVel_max) => {
-  motionDir = vec.normalized(motionDir);
-  let playerVel_projectedOn_motionDir = vec.dot(qVel, motionDir);
-  let motionSpeed = playerVel_projectedOn_motionDir;
-  if (motionSpeed < 0) motionSpeed = 0;
-  motionSpeed = minspeed + (motionSpeed / qVelMax) * (maxspeed - minspeed);
-  return vec.normalized(motionDir, motionSpeed);
-}
-
 var getOwned = (pid_from) => {
   return playersInfo[pid_from].hooks.owned;
 }
@@ -569,7 +574,9 @@ var generateHID = () => {
 var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
   let hookColors = playersInfo[pid_from].hooks.defaultColors;
-  let hookVel = projectedVelocityInDirection(p.vel, throwDir, playersInfo[pid_from].hooks.attached.size !== 0 ? hookspeed_min_hooked : hookspeed_min, hookspeed_max);
+  let hookVel = playersInfo[pid_from].hooks.followHook ?
+    vec.normalized(throwDir, hookspeed_hooked)
+    : projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
   let hook = {
     from: pid_from,
     to: null,
@@ -585,6 +592,21 @@ var createNewHook = (pid_from, throwDir) => {
   return [hid, hook];
 }
 
+//updates velocity for when hook is in isResetting mode
+// should call hook_reset_init before running this...
+var hook_reset_velocity_update = (h) => {
+  let reelDir = vec.sub(players[h.from].loc, h.loc);
+  h.vel = vec.normalized(reelDir, hookspeed_reset);//projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeed_reset, hookspeed_reset + playerVel_max);
+}
+
+// no need to call hook_detach before running this!!
+var hookResetInit = (hid, setWaitTillExit) => {
+  let h = hooks[hid];
+  if (h.isResetting) return;
+  hookDetach(hid, setWaitTillExit);
+  h.isResetting = true;
+  h.vel = hook_reset_velocity_update(h);
+}
 
 //detach hid from everyone it's hooking
 //deletePlayersInfoOnly = true only when the hook will be deleted immediately (so don't need to bother deleting hook info)
@@ -675,23 +697,6 @@ var hookDelete = (hid) => {
   // console.log('hooks after delete', hooks);
 }
 
-
-//updates velocity for when hook is in isResetting mode
-// should call hook_reset_init before running this...
-var hook_reset_velocity_update = (h) => {
-  let reelDir = vec.sub(players[h.from].loc, h.loc);
-  h.vel = vec.normalized(reelDir, hookspeed_reset);//projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeed_reset, hookspeed_reset + playerVel_max);
-}
-
-// no need to call hook_detach before running this!!
-var hookResetInit = (hid, setWaitTillExit) => {
-  // if calling this, not gonna be deleting the hook so 2nd arg is false:
-  hookDetach(hid, setWaitTillExit);
-  let h = hooks[hid];
-  h.isResetting = true;
-  hook_reset_velocity_update(h);
-}
-
 var hook_resetAllOwned = (pid, setWaitTillExit) => {
   for (let hid of getOwned(pid)) {
     hookResetInit(hid, setWaitTillExit);
@@ -726,7 +731,7 @@ var throw_cooldown_decay = (pInfo, dt) => {
 
 
 // assumes h.reelingPlayer
-var nofriction_timeout_decay = (h, dt) => {
+var reel_nofriction_timeout_decay = (h, dt) => {
   // hook must be reeling a player to have decay
   // decrease cooldown
   if (h.nofriction_timeout) {
@@ -749,6 +754,30 @@ var nofriction_timeout_decay = (h, dt) => {
     //player stops following hook and hook starts following player
     hookStopReelingPlayer(h);
   }
+}
+
+
+var hook_aiming_location_update = (h, dt) => {
+  let pVel = players[h.from].vel;
+  if (vec.magnitude(pVel) === 0) return;
+
+  let PtoH = vec.sub(h.loc, players[h.from].loc);
+  if (vec.magnitude(PtoH) === 0) return;
+
+  // hook vel += aimingspeed * (player vel - player vel in direction of reel)
+  let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
+  //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
+  let sinTheta = vec.crossMagnitude(PtoH, pVel) / (vec.magnitude(PtoH) * vec.magnitude(pVel));
+  sinTheta = Math.abs(sinTheta);
+  h.loc = vec.add(h.loc, vec.normalized(pVelOrthogonalToReel, dt * sinTheta * vec.magnitude(pVel)));
+}
+/** ---------- AIMING FUNCTIONS ---------- */
+var aimingStart = (pid) => {
+  playersInfo[pid].hooks.isAiming = true;
+}
+
+var aimingStop = (pid) => {
+  playersInfo[pid].hooks.isAiming = false;
 }
 
 /** ---------- EVENT HELPERS ---------- */
@@ -826,6 +855,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}, pInfoOptions = {}) => {
         throw_cooldown: null,
         hookedBy: new Set(),
         attachedTo: new Set(),
+        isAiming: false,
         defaultColors: [hCol, lineCol, bobberCol],
       },
       knockback: {
@@ -910,6 +940,14 @@ io.on('connection', (socket) => {
     hook_deleteAllOwned(socket.id);
   });
 
+  socket.on('startaiming', () => {
+    aimingStart(socket.id);
+  });
+  
+  socket.on('stopaiming', () => {
+    aimingStop(socket.id);
+  });
+
 
 
 });
@@ -934,13 +972,13 @@ const runGame = () => {
   for (let hid in hooks) {
     let h = hooks[hid];
     //if reeling a player, then decay the reel
-    if (h.reelingPlayer)
-      nofriction_timeout_decay(h, dt);
+    if (h.reelingPlayer) {
+      reel_nofriction_timeout_decay(h, dt);
+    }
     else if (h.isResetting) //h.reelingPlayer will never be true when h.isResetting, since reelingPlayer requries h.to and resetting requires !h.to
       hook_reset_velocity_update(h);
 
     if (h.vel) {
-      // h.vel = vec.normalized(vec.add(vec.normalized(players[h.from].vel, 1/1000), vec.normalized(h.vel)), vec.magnitude(h.vel));
       h.loc = vec.add(h.loc, vec.scalar(h.vel, dt));
     }
   }
@@ -959,6 +997,7 @@ const runGame = () => {
     player_velocity_update(pInfo, p, pInfo.hooks.followHook);
     // update player location (even if hooked, lets player walk within hook bubble)
     p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+
     // update players confined to hook radius
     if (pInfo.hooks.followHook) {
       let h = hooks[pInfo.hooks.followHook];
@@ -968,6 +1007,7 @@ const runGame = () => {
         p.loc = vec.add(h.loc, vec.normalized(htop, playerRadius));
       }
     }
+
     // confine player to world border
     if (!vec.isContaining({ x: 0, y: 0 }, p.loc, mapRadius, playerRadius)) {
       p.loc = vec.normalized(p.loc, mapRadius - playerRadius);
@@ -978,17 +1018,25 @@ const runGame = () => {
         if (vec.dot(h.loc, h.vel) > 0) //if velocity has towards-border velocity component, reset the reel
           hookStopReelingPlayer(h);
       }
-      // knockbackReset(pInfo);
+    }
+
+    // update locations of hooks of the player if the player is aiming now that h.from's location and velocity are updated
+    if (pInfo.hooks.isAiming) {
+      for (let hid of pInfo.hooks.owned) {
+        let h = hooks[hid];
+        if (!h.to)
+          hook_aiming_location_update(h, dt);
+      }
     }
   }
 
 
-  // update all hooks following a player now that players have moved
+  // update all hooks following a player now that players have moved and velocities are updated
   // also update all hook info based on player collisions
   for (let hid in hooks) {
     let h = hooks[hid];
-    // --- DELETE HOOK IF TOO FAR --- 
-    // if hook is too far, delete it
+    // --- RESET HOOK IF TOO FAR --- 
+    // if hook is too far, reset it
     if (!vec.isContaining(players[h.from].loc, h.loc, hookCutoffDistance, 0)) {
       hookResetInit(hid, false);
       continue;
@@ -1004,11 +1052,12 @@ const runGame = () => {
       // if following, then h.to, so don't care about collisions, already hooked
       continue;
     }
+
     // --- HANDLE COLLISIONS OF HOOKS NOT YET ATTACHED (!h.to) ---
     hooksTakenCareOf.clear(); //ensures two players dont try to delete the same hook
     for (let pid in players) { //pid = player to be hooked
       //player has exited hook, so remove it from waitTillExit
-      if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, 0)) {
+      if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius_outer)) {
         h.waitTillExit.delete(pid);
       }
       //do nothing if this hook already had something done to it due to a collision
@@ -1017,16 +1066,16 @@ const runGame = () => {
       }
       // if colliding and not in waitTillExit
       else if (!h.waitTillExit.has(pid)) {
-        //if player colliding with their own hook, delete
-        if (h.from === pid && !h.to) {
-          playersInfo[pid].hooks.throw_cooldown = null;
-          hookDelete(hid);
-          hooksTakenCareOf.add(hid);
-        }
         //if hook has no to, then treat as if it's about to hook someone
-        else if (!h.to) {
+        if (!h.to) {
+          //if player colliding with their own hook, delete
+          if (h.from === pid && !h.to) {
+            playersInfo[pid].hooks.throw_cooldown = null;
+            hookDelete(hid);
+            hooksTakenCareOf.add(hid);
+          }
           // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
-          if (getHookedBy(pid).has(h.from)) {
+          else if (getHookedBy(pid).has(h.from)) {
             //reset old attached hook, and attach the new hook 
             let oldhook = getHookFrom_To_(h.from, pid);
 
@@ -1080,4 +1129,4 @@ const runGame = () => {
 
   io.volatile.json.emit('serverimage', players, hooks);
 }
-setInterval(runGame, WAIT_TIME);
+setInterval(runGame, GAME_UPDATE_TIME);
