@@ -44,7 +44,7 @@ const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
 const aimingspeed = 100 / 1000;
 
-const hookspeed_min = playerVel_max / Math.sqrt(2);
+const hookspeed_min = playerVel_max;
 const hookspeed_max = playerVel_max;
 const hookspeed_hooked = hookspeed_max + 300 / 1000;
 
@@ -1021,7 +1021,7 @@ const runGame = () => {
     }
 
     // update locations of hooks of the player if the player is aiming now that h.from's location and velocity are updated
-    if (pInfo.hooks.isAiming) {
+    if (pInfo.hooks.isAiming || pInfo.hooks.isResetting) {
       for (let hid of pInfo.hooks.owned) {
         let h = hooks[hid];
         if (!h.to)
