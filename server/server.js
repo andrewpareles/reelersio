@@ -155,6 +155,8 @@ const playerHookColorPalette = generateColorPalette();
 // hookspeed = player walkspeed PLUS throw speed in that dir (ditch complicated projectedOn)
 // player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
 // fix backwards kb
+// fix aiming for hooked players (so it's way faster and more controlled), and resetting hooks
+
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -763,7 +765,7 @@ var hook_aiming_get_velocity = (h) => {
 
   let PtoH = vec.sub(h.loc, players[h.from].loc);
   if (vec.magnitude(PtoH) === 0) return vec.zero;
-  
+
   // hook vel += aimingspeed * (player vel - player vel in direction of reel)
   let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
   //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
@@ -1027,7 +1029,7 @@ const runGame = () => {
     }
 
     // update locations of hooks of the player if the player is aiming now that h.from's location and velocity are updated
-    if (pInfo.hooks.isAiming || pInfo.hooks.isResetting) {
+    if (pInfo.hooks.isAiming) {
       for (let hid of pInfo.hooks.owned) {
         let h = hooks[hid];
         if (!h.to)
