@@ -794,10 +794,10 @@ var player_create = (pid, username) => {
   players[pid] = newPlayer;
   playersInfo[pid] = newPlayerInfo;
   //TODO REMOVE!!!! dummy player for testing
-  [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
-  let randomId = 'dummy' + Math.random();
-  players[randomId] = newPlayer;
-  playersInfo[randomId] = newPlayerInfo;
+  // [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
+  // let randomId = 'dummy' + Math.random();
+  // players[randomId] = newPlayer;
+  // playersInfo[randomId] = newPlayerInfo;
   // console.log("hooks:", hooks);
 }
 
