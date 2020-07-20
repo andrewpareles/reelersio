@@ -77,6 +77,10 @@ const crossMagnitude = (a, b) => {
 
 const zero = { x: 0, y: 0 };
 
+const sumNormalizedToFirst = (a, b) => {
+  return normalized(add(a, b), magnitude(a));
+}
+
 exports.vec = {
   add: add,
   negative: negative,
@@ -93,5 +97,6 @@ exports.vec = {
   apply: apply,
   crossMagnitude: crossMagnitude,
   zero: zero,
+  sumNormalizedToFirst: sumNormalizedToFirst,
 
 }
