@@ -15,7 +15,7 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 16; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 
-const createDummy = true;
+const createDummy = false;
 
 const numHoles = 100;
 const mapRadius = 5000;
