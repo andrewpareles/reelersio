@@ -18,6 +18,7 @@ var playerRadius = null;
 var hookRadius_outer = null;
 var hookRadius_inner = null;
 var mapRadius = null;
+var maxMessageLen = null;
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -65,8 +66,16 @@ var send = {
   stopaiming: () => {
     socket.emit('stopaiming');
   },
+  chatmessage: (msg) => {
+    socket.emit('chatmessage', msg);
+  },
 }
 
+
+
+/** ---------- CHAT ---------- */
+var isChatting = false;
+var chatMsg = "";
 
 
 /** ---------- KEYBOARD (ALL LOCAL) ---------- */
@@ -80,8 +89,9 @@ var keyActions = {
   'r': "resethooks",
   'c': "resetzoom",
   'shift': "aiming",
-  '1': "aiming",
-  '/': "chat",
+  '/': "startchat",
+  'enter': "sendchat",
+  'escape': "cancel",
 }
 
 
@@ -226,11 +236,38 @@ var playerCamera = {
     c.arc(loc.x, loc.y, playerRadius / camZoom - c.lineWidth / 2, 0, 2 * Math.PI);
     c.stroke();
 
-    // c.font = "10px Verdana";
-    // c.textAlign = "center";
-    // c.textBaseline = "top";
-    // c.fillStyle = color;
-    // c.fillText(username, loc.x, loc.y + playerRadius + 5);
+
+    //draw chat messages:
+    let n = 1;
+    if (pid === socket.id && isChatting) {
+      let msg = chatMsg || "|";
+      c.font = (20 / camZoom) + "px Verdana";
+      c.textAlign = "center";
+      c.textBaseline = "top";
+      //inside
+      c.fillStyle = color;
+      c.fillText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+      //outline
+      c.strokeStyle = 'black';
+      c.lineWidth = .1 / camZoom;
+      c.strokeText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+      n++;
+    }
+    for (let i = players[pid].messages.length - 1; i >= 0; i--) {
+      let msg = players[pid].messages[i];
+      c.font = (30 / camZoom) + "px Verdana";
+      c.textAlign = "center";
+      c.textBaseline = "top";
+      //inside
+      c.fillStyle = color;
+      c.fillText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+      //bold
+      c.strokeStyle = 'black';
+      c.lineWidth = .1 / camZoom;
+      c.strokeText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+      n++;
+    }
+
   },
 
   drawHook: (hid, pid_from) => {
@@ -336,10 +373,23 @@ document.addEventListener('keydown', function (event) {
   let key = event.key.toLowerCase();
   if (keysPressedLocal.has(key)) return;
   keysPressedLocal.add(key);
-
   // console.log('pressing', key);
 
-  if (keyDirections[key]) { //ie WASD was pressed, not some other key
+  if (isChatting && key.length === 1) {
+    if (chatMsg.length < maxMessageLen) {
+      chatMsg += event.key;
+    }
+  }
+  else if (isChatting && key == "backspace") {
+    if (chatMsg.length === 1) {
+      chatMsg = "";
+      isChatting = false;
+    } else {
+      chatMsg = chatMsg.substr(0, chatMsg.length - 1);
+    }
+  }
+
+  else if (keyDirections[key]) { //ie WASD was pressed, not some other key
     let movementDir = keyDirections[key];
     send.goindirection(movementDir);
 
@@ -355,6 +405,26 @@ document.addEventListener('keydown', function (event) {
       case "aiming":
         send.startaiming();
         break;
+
+      // chat:
+      case "startchat":
+        isChatting = true;
+        chatMsg = "";
+        break;
+      case "sendchat":
+        if (isChatting) {
+          chatMsg = chatMsg.trim();
+          if (chatMsg) send.chatmessage(chatMsg);
+          isChatting = false;
+          chatMsg = "";
+        }
+        break;
+      case "cancel":
+        if (isChatting) {
+          isChatting = false;
+          chatMsg = "";
+        }
+        break;
     }
 
   }
@@ -366,7 +436,6 @@ document.addEventListener('keyup', function (event) {
   keysPressedLocal.delete(key);
 
   // console.log('releasing', key);
-
 
   if (keyDirections[key]) {
     let movementDir = keyDirections[key];
@@ -431,7 +500,7 @@ const whenConnect = async () => {
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
     [players, hooks, world, playerRadius, hookRadius_outer,
-      hookRadius_inner, mapRadius] = serverInfo;
+      hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
   await send.join(joinCallback);
 

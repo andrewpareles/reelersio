@@ -29,6 +29,11 @@ const throw_cooldown = 100; //ms
 const reel_cooldown = 1.5 * 1000;
 const reel_nofriction_timeout = 1 * 1000//.4 * 1000;
 const knockback_nofriction_timeout = .2 * 1000;
+const chat_message_timeout = 10 * 1000;
+
+const chat_maxMessages = 3;
+const chat_maxMessageLen = 30;
+
 
 const walkspeed = 225 / 1000; // pix/ms
 const walkspeed_hooked = 100 / 1000; // pix/ms
@@ -44,7 +49,7 @@ const d0 = 1 / (.5 * 16);
 
 const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const aimingspeed = (Math.PI) / 1000; //radians per ms
+const aimingspeed_hooked = walkspeed;
 
 const hookspeed_min = 600 / 1000;
 const hookspeed_max = 700 / 1000;
@@ -147,16 +152,13 @@ const playerHookColorPalette = generateColorPalette();
 // hook turns red if almost too far
 // world is sent once at beginning, callback does not do anything with players or hooks
 
-// better aiming (SHIFTING)
 // player walking into wall has 0 velocity
 // send update on a frequent interval, independent from WAIT_TIME (based on ping?)
 
 // TODO make reel cooldown = amount of time it takes for hook to stop after reeling them in (related to nofriction_timeoutf)
 // also make reel so that player doesn't have to walk back towards player theyre reeling (distance per reel > distance that player could walk in that time)
-// better aiming when reeling hook by reeling towards player, and in player movement dir when orthogonal to player direction (h.vel = p.vel orthogonal to p.loc-h.loc)
 // hookspeed = player walkspeed PLUS throw speed in that dir (ditch complicated projectedOn)
 // player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
-// fix backwards kb
 // fix aiming for hooked players (so it's way faster and more controlled), and resetting hooks
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
@@ -168,6 +170,7 @@ var players = {
 
       username: "billybob",
       color: "orange",
+      messages:[m0, m1, ...]
     }
     */
 };
@@ -199,6 +202,10 @@ var playersInfo = {
       
       hooks: {
         see hook invariants
+      },
+      
+      chat: {
+        timeouts: [t0, t1, ...], //list of time before message disappears, corresponding to each msg
       }
     },
   */
@@ -467,6 +474,36 @@ var player_velocity_update = (pInfo, p, followHook) => {
     ans = vec.add(ans, kb);
   }
   p.vel = ans;
+}
+
+/** ---------- CHAT FUNCTIONS ---------- */
+var chatAddMessage = (pid, msg) => {
+  msg = msg.trim();
+  if (!msg) return;
+  if (msg.length > chat_maxMessageLen) {
+    msg = msg.substring(0, chat_maxMessageLen);
+  }
+  if (players[pid].messages.length === chat_maxMessages) {
+    players[pid].messages.shift();
+    playersInfo[pid].chat.timeouts.shift();
+  }
+
+  players[pid].messages.push(msg);
+  playersInfo[pid].chat.timeouts.push(chat_message_timeout);
+}
+
+var chatRemoveMessage = (pid) => {
+  players[pid].messages.shift();
+  playersInfo[pid].chat.timeouts.shift();
+}
+
+var chat_message_timeout_decay = (pid, dt) => {
+  for (let i = 0; i < playersInfo[pid].chat.timeouts.length; i++) {
+    playersInfo[pid].chat.timeouts[i] -= dt;
+    if (playersInfo[pid].chat.timeouts[i] < 0) {
+      chatRemoveMessage(pid);
+    }
+  }
 }
 
 /** ---------- KNOCKBACK FUNCTIONS ---------- */
@@ -816,7 +853,7 @@ const generateRandomPlayerColor = () => {
   return playerHookColorPalette[Math.floor(Math.random() * playerHookColorPalette.length)];
 }
 
-const createNewPlayerAndInfo = (username, pOptions = {}, pInfoOptions = {}) => {
+const createNewPlayerAndInfo = (username, pOptions = {}) => {
   let startLoc = generateRandomLoc();
   let [pCol, hCol, lineCol, bobberCol] = generateRandomPlayerColor();
   return [
@@ -825,6 +862,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}, pInfoOptions = {}) => {
       vel: { x: 0, y: 0 },
       username: username,
       color: pCol,
+      messages: [],
       ...pOptions,
     },
     // PLAYER INFO:
@@ -856,7 +894,9 @@ const createNewPlayerAndInfo = (username, pOptions = {}, pInfoOptions = {}) => {
         dir: null,
         timeremaining: null,
       },
-      ...pInfoOptions,
+      chat: {
+        timeouts: [],
+      }
     }
   ]
 }
@@ -878,6 +918,7 @@ io.on('connection', (socket) => {
       hookRadius_outer,
       hookRadius_inner,
       mapRadius,
+      chat_maxMessageLen,
     );
   });
 
@@ -941,6 +982,10 @@ io.on('connection', (socket) => {
     aimingStop(socket.id);
   });
 
+  socket.on('chatmessage', (msg) => {
+    chatAddMessage(socket.id, msg);
+  });
+
 
 
 });
@@ -983,6 +1028,8 @@ const runGame = () => {
   for (let pid in players) {
     let pInfo = playersInfo[pid];
     let p = players[pid];
+    //chat timeout
+    chat_message_timeout_decay(pid, dt);
     // cooldown
     reel_cooldown_decay(pInfo, dt);
     throw_cooldown_decay(pInfo, dt);
