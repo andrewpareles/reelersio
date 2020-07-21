@@ -53,7 +53,7 @@ const aimingspeed_hooked = walkspeed;
 
 const hookspeed_min = 600 / 1000;
 const hookspeed_max = 700 / 1000;
-const hookspeed_hooked = hookspeed_max + 300 / 1000;
+const hookspeed_hooked = hookspeed_max + 100 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
 
@@ -1069,11 +1069,14 @@ const runGame = () => {
     let h = hooks[hid];
     // --- UPDATE LOC OF HOOKS BEING AIMED OR RESETTING --- 
     if (!h.to && playersInfo[h.from].hooks.isAiming) {
-      // hook_aiming_velocity_update(h, playersInfo[h.from].walk.directionPressed);
       let PtoH = vec.sub(h.loc, players[h.from].loc);
-      let pVelOrthogonalToReel = vec.orthogonalComponent(players[h.from].vel, PtoH);
+      let aimDir = playersInfo[h.from].hooks.attached.size > 0 ?
+        vec.normalized(playersInfo[h.from].walk.directionPressed, aimingspeed_hooked)
+        : players[h.from].vel;
+      let pVelOrthogonalToReel = vec.orthogonalComponent(aimDir, PtoH);
       h.loc = vec.add(h.loc, vec.scalar(pVelOrthogonalToReel, dt));
     }
+
     // --- UPDATE LOC OF HOOKS FOLLOWING A PLAYER --- 
     if (!h.vel) { //aka h.to
       let p = players[h.to]; //guaranteed to exist since !h.vel
