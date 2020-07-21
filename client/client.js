@@ -381,12 +381,7 @@ document.addEventListener('keydown', function (event) {
     }
   }
   else if (isChatting && key == "backspace") {
-    if (chatMsg.length === 1) {
-      chatMsg = "";
-      isChatting = false;
-    } else {
-      chatMsg = chatMsg.substr(0, chatMsg.length - 1);
-    }
+    chatMsg = chatMsg.substr(0, chatMsg.length - 1);
   }
 
   else if (keyDirections[key]) { //ie WASD was pressed, not some other key

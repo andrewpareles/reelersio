@@ -133,21 +133,14 @@ var generateColorPalette = () => {
 const playerHookColorPalette = generateColorPalette();
 
 //TODO: SEND ONLY WHAT YOU NEED (loc, not vel or anything else)
-//TODO: disconnect bug / coloring bug
+//TODO: disconnect bug
 //TODO: efficiencies, add redundancy in data structures (get rid of loop in hook-hook check with playersHooked object, etc)
 // TODOs:
 // - player hooking speed is slower
-// - player hooked speed is much slower and there's an allowed region within distance of the followHook you can go
-// - player hooked hookthrow speed is faster
-// - colors in hooks and players!!! fix colors, rendering etc
-// - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
 // - reeling a player who's walking away is slower (or faster?) than usual
-// - when delete a hook, delete all hooks that landed on that player after it
-// pulls only last 1 sec
-// hooks are centered on player
 // if player is beeing reeled, their velocity should reflect that
-// if throw then reel immediately, hook should disappear
-// - map stuff
+// - map stuff : locality on a big map
+// - warning if hook is approaching the hookReset distance, and hook slows down / changes color too
 // string turns green when ready to reel
 // hook turns red if almost too far
 // world is sent once at beginning, callback does not do anything with players or hooks
@@ -157,9 +150,11 @@ const playerHookColorPalette = generateColorPalette();
 
 // TODO make reel cooldown = amount of time it takes for hook to stop after reeling them in (related to nofriction_timeoutf)
 // also make reel so that player doesn't have to walk back towards player theyre reeling (distance per reel > distance that player could walk in that time)
-// hookspeed = player walkspeed PLUS throw speed in that dir (ditch complicated projectedOn)
 // player should be able to follow their hook like it's a leash on a dog even if it's going at a 45 degree angle (worst case), it shouldnt be too fast
 // fix aiming for hooked players (so it's way faster and more controlled), and resetting hooks
+//better aiming cancels boost
+//hook deflection on border
+//while reeling, slow down?
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
