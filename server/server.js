@@ -235,7 +235,6 @@ Hook invariants:
     reelingPlayer, //not null iff there exists a player with p.followHook === reelingPlayer, i.e. this hook is currently reeling reelingPlayer
     nofriction_timeout: null, // not null ==> reelingPlayer not null (not vice versa). Time left for reelingPlayer to follow followHook (starts from top whenever h.to reeled, resets to null whenever another hook on h.attached gets reeled), and then hook vel decays, and then hook follows player and player stops following hook
     waitTillExit: new Set(), //the players that this hook will ignore (not latch onto/disappear) (when the hook exits a player, it should remove that player--only has elements when !h.to) 
-    baseSpeed: initialSpeed, //defined iff !h.to. helps in aiming so can calculate orthogonal and parallel components of velocity (relative to player) 
   }
 
   playersInfo[pid].hooks: {
@@ -529,22 +528,6 @@ var knockback_timeout_decay = (pInfo, dt) => {
 }
 
 /** ---------- AIMING FUNCTIONS ---------- */
-var hook_aiming_velocity_update = (h, aimDir) => {
-  if (vec.magnitude(aimDir) === 0) return;
-
-  let PtoH = vec.sub(h.loc, players[h.from].loc);
-  if (vec.magnitude(PtoH) === 0) return;
-
-  let aimOrthogonalToReel = vec.orthogonalComponent(aimDir, PtoH);
-  let aimSpeed = aimingspeed ;
-  let orthogVel = vec.normalized(aimOrthogonalToReel, aimSpeed);
-  let parallelVel = vec.normalized(PtoH, h.baseSpeed);
-
-  let ret = vec.add(parallelVel, orthogVel);
-  // console.log('ret', ret);
-  h.vel = ret;
-}
-
 var aimingStart = (pid) => {
   playersInfo[pid].hooks.isAiming = true;
 }
@@ -618,7 +601,6 @@ var createNewHook = (pid_from, throwDir) => {
     nofriction_timeout: null,
     waitTillExit: new Set(),
     colors: hookColors,
-    baseSpeed: vec.magnitude(hookVel),
   };
   let hid = generateHID();
   return [hid, hook];
@@ -680,7 +662,6 @@ var hookAttach = (hid, pid_to) => {
   hooks[hid].to = pid_to;
   hooks[hid].vel = null;
   hooks[hid].isResetting = false;
-  hooks[hid].baseSpeed = null;
   getAttached(pid_to).add(hid);
   getHookedBy(pid_to).add(hooks[hid].from);
   getAttachedTo(hooks[hid].from).add(pid_to);
