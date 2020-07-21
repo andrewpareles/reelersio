@@ -8,6 +8,16 @@ const add = (...vecs) => {
   return { x: x, y: y };
 };
 
+const weightedSum = (weights, ...vecs) => {
+  if (weights.length !== vecs.length) throw 'weightedAverage expected weights and vecs to be same length';
+  let x = 0, y = 0;
+  for (let [i, v] of vecs.entries()) {
+    x += v.x * weights[i];
+    y += v.y * weights[i];
+  }
+  return { x: x, y: y };
+}
+
 const negative = (a) => {
   return scalar(a, -1);
 };
@@ -77,12 +87,24 @@ const crossMagnitude = (a, b) => {
 
 const zero = { x: 0, y: 0 };
 
-const sumNormalizedToFirst = (a, b) => {
-  return normalized(add(a, b), magnitude(a));
+//returns component of `a` projected onto normalized direction of b
+const parallelComponentMagnitude = (a, b) => {
+  return dot(a, normalized(b));
+}
+
+//returns a projected on b
+const parallelComponent = (a, b) => {
+  return normalized(b, parallelComponentMagnitude(a, b));
+}
+
+//returns `a` projected on orthogonal of normalized(b), ie complement component to the parallel component 
+const orthogonalComponent = (a, b) => {
+  return sub(a, parallelComponent(a, b));
 }
 
 exports.vec = {
   add: add,
+  weightedSum: weightedSum,
   negative: negative,
   sub: sub,
   scalar: scalar,
@@ -96,7 +118,9 @@ exports.vec = {
   average: average,
   apply: apply,
   crossMagnitude: crossMagnitude,
+  parallelComponent: parallelComponent,
+  parallelComponentMagnitude: parallelComponentMagnitude,
+  orthogonalComponent: orthogonalComponent,
   zero: zero,
-  sumNormalizedToFirst: sumNormalizedToFirst,
 
 }

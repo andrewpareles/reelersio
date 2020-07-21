@@ -15,6 +15,8 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 16; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 
+const createDummy = true;
+
 const numHoles = 100;
 const mapRadius = 5000;
 const playerRadius = 40; //pix
@@ -42,10 +44,10 @@ const d0 = 1 / (.5 * 16);
 
 const playerVel_max = (1 + boostMultEffective_max) * walkspeed; //ignoring kb
 
-const aimingspeed = 100 / 1000;
+const aimingspeed = (Math.PI) / 1000; //radians per ms
 
-const hookspeed_min = 500 / 1000;
-const hookspeed_max = 500 / 1000;
+const hookspeed_min = 600 / 1000;
+const hookspeed_max = 700 / 1000;
 const hookspeed_hooked = hookspeed_max + 300 / 1000;
 
 const hookspeed_reset = 1500 / 1000;
@@ -59,6 +61,7 @@ const d0h = 1 / (.015 * 16);
 
 const knockbackspeed_min = 400 / 1000; // only for one engagement-- multiple kbs can combine to make speeds bigger or smaller than this
 const knockbackspeed_max = 450 / 1000;
+const percentPoolBallEffect = .3;
 const a0k = 4 * 1 / (160 * 16);
 const b0k = 4 * 1 / (1000 * 16);
 const c0k = 2 * 1 / (30 * 16);
@@ -76,11 +79,10 @@ const generateRandomLoc = () => {
 // minSpeed is the minimum speed that can be returned (if it would return 0, return motionDir with speed minSpeed. same idea for maxSpeed)
 // multiplier is the multiplier for the projected velocity
 var projectedVelocityInDirection = (qVel, motionDir, minSpeed = -Infinity, maxSpeed = Infinity, multiplier = 1) => {
-  motionDir = vec.normalized(motionDir);
-  let projectedSpeed = multiplier * vec.dot(qVel, motionDir);
-  if (projectedSpeed < minSpeed) projectedSpeed = minSpeed;
-  else if (projectedSpeed > maxSpeed) projectedSpeed = maxSpeed;
-  let motionVec = vec.normalized(motionDir, projectedSpeed);
+  let motionSpeed = multiplier * vec.parallelComponentMagnitude(qVel, motionDir);
+  if (motionSpeed < minSpeed) motionSpeed = minSpeed;
+  else if (motionSpeed > maxSpeed) motionSpeed = maxSpeed;
+  let motionVec = vec.normalized(motionDir, motionSpeed);
   return motionVec;
 }
 
@@ -233,6 +235,7 @@ Hook invariants:
     reelingPlayer, //not null iff there exists a player with p.followHook === reelingPlayer, i.e. this hook is currently reeling reelingPlayer
     nofriction_timeout: null, // not null ==> reelingPlayer not null (not vice versa). Time left for reelingPlayer to follow followHook (starts from top whenever h.to reeled, resets to null whenever another hook on h.attached gets reeled), and then hook vel decays, and then hook follows player and player stops following hook
     waitTillExit: new Set(), //the players that this hook will ignore (not latch onto/disappear) (when the hook exits a player, it should remove that player--only has elements when !h.to) 
+    baseSpeed: initialSpeed, //defined iff !h.to. helps in aiming so can calculate orthogonal and parallel components of velocity (relative to player) 
   }
 
   playersInfo[pid].hooks: {
@@ -476,7 +479,7 @@ var knockbackAdd = (hid, pid) => {
   let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
   if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) { //ignores case where hookToKbPlayer = {0,0}
     let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max);
-    kbVel = vec.average(kbFromPoolEffect, kbFromHookVel);
+    kbVel = vec.weightedSum([percentPoolBallEffect, 1 - percentPoolBallEffect], kbFromPoolEffect, kbFromHookVel);
   } else { //just hook vel:
     kbVel = kbFromHookVel;
   }
@@ -526,21 +529,20 @@ var knockback_timeout_decay = (pInfo, dt) => {
 }
 
 /** ---------- AIMING FUNCTIONS ---------- */
-var hook_aiming_get_aim_velocity = (h) => {
-  let pVel = players[h.from].vel;
-  if (vec.magnitude(pVel) === 0) return vec.zero;
+var hook_aiming_velocity_update = (h, aimDir) => {
+  if (vec.magnitude(aimDir) === 0) return;
 
   let PtoH = vec.sub(h.loc, players[h.from].loc);
-  if (vec.magnitude(PtoH) === 0) return vec.zero;
+  if (vec.magnitude(PtoH) === 0) return;
 
-  // return hook vel = aimingspeed * (player vel - player vel in direction of reel)
-  let pVelOrthogonalToReel = vec.sub(pVel, projectedVelocityInDirection(pVel, PtoH));
-  //sinTheta = measure of how perpendicular addition of velocity is to hook dir (otherwise at small angles it gets weird)
-  let sinTheta = vec.crossMagnitude(PtoH, pVel) / (vec.magnitude(PtoH) * vec.magnitude(pVel));
-  sinTheta = Math.abs(sinTheta);
-  let ret = vec.normalized(pVelOrthogonalToReel, sinTheta * vec.magnitude(pVel));
+  let aimOrthogonalToReel = vec.orthogonalComponent(aimDir, PtoH);
+  let aimSpeed = aimingspeed ;
+  let orthogVel = vec.normalized(aimOrthogonalToReel, aimSpeed);
+  let parallelVel = vec.normalized(PtoH, h.baseSpeed);
+
+  let ret = vec.add(parallelVel, orthogVel);
   // console.log('ret', ret);
-  return ret;
+  h.vel = ret;
 }
 
 var aimingStart = (pid) => {
@@ -603,7 +605,7 @@ var generateHID = () => {
 var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
   let hookColors = playersInfo[pid_from].hooks.defaultColors;
-  let hookVel = playersInfo[pid_from].hooks.followHook ?
+  let hookVel = playersInfo[pid_from].hooks.attached.size > 0 ?
     vec.normalized(throwDir, hookspeed_hooked)
     : projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
   let hook = {
@@ -616,6 +618,7 @@ var createNewHook = (pid_from, throwDir) => {
     nofriction_timeout: null,
     waitTillExit: new Set(),
     colors: hookColors,
+    baseSpeed: vec.magnitude(hookVel),
   };
   let hid = generateHID();
   return [hid, hook];
@@ -677,6 +680,7 @@ var hookAttach = (hid, pid_to) => {
   hooks[hid].to = pid_to;
   hooks[hid].vel = null;
   hooks[hid].isResetting = false;
+  hooks[hid].baseSpeed = null;
   getAttached(pid_to).add(hid);
   getHookedBy(pid_to).add(hooks[hid].from);
   getAttachedTo(hooks[hid].from).add(pid_to);
@@ -793,11 +797,12 @@ var player_create = (pid, username) => {
   if (playersInfo[pid]) console.error('playersInfo already exists when joining', pid)
   players[pid] = newPlayer;
   playersInfo[pid] = newPlayerInfo;
-  //TODO REMOVE!!!! dummy player for testing
-  // [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
-  // let randomId = 'dummy' + Math.random();
-  // players[randomId] = newPlayer;
-  // playersInfo[randomId] = newPlayerInfo;
+  if (createDummy) {
+    [newPlayer, newPlayerInfo] = createNewPlayerAndInfo(username, { loc: newPlayer.loc });
+    let randomId = 'dummy' + Math.random();
+    players[randomId] = newPlayer;
+    playersInfo[randomId] = newPlayerInfo;
+  }
   // console.log("hooks:", hooks);
 }
 
@@ -1035,18 +1040,19 @@ const runGame = () => {
   for (let hid in hooks) {
     let h = hooks[hid];
     // --- UPDATE LOC OF HOOKS BEING AIMED OR RESETTING --- 
-    // if (!h.to && (playersInfo[h.from].hooks.isAiming || h.isResetting)) {
-    //   let dVel = hook_aiming_get_aim_velocity(h);
-    //   h.vel = vec.sumNormalizedToFirst(players[h.from].vel, vec.sumNormalizedToFirst(h.vel, dVel));
-    //   h.loc = vec.add(h.loc, vec.scalar(dVel, dt));
-    // }
+    if (!h.to && playersInfo[h.from].hooks.isAiming) {
+      // hook_aiming_velocity_update(h, playersInfo[h.from].walk.directionPressed);
+      let PtoH = vec.sub(h.loc, players[h.from].loc);
+      let pVelOrthogonalToReel = vec.orthogonalComponent(players[h.from].vel, PtoH);
+      h.loc = vec.add(h.loc, vec.scalar(pVelOrthogonalToReel, dt));
+    }
     // --- UPDATE LOC OF HOOKS FOLLOWING A PLAYER --- 
     if (!h.vel) { //aka h.to
       let p = players[h.to]; //guaranteed to exist since !h.vel
       // if h.to doesn't contain hook anymore, project hook onto h.to
       if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
-        let ptoh = vec.sub(h.loc, p.loc);
-        h.loc = vec.add(p.loc, vec.normalized(ptoh, playerRadius));
+        let PtoH = vec.sub(h.loc, p.loc);
+        h.loc = vec.add(p.loc, vec.normalized(PtoH, playerRadius));
       }
       // if following, then h.to, so don't care about collisions, already hooked
     }
