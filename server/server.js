@@ -14,7 +14,7 @@ const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
-const GAME_SEND_TIME = 100;
+const GAME_SEND_TIME = 16;
 
 const createDummy = false;
 
