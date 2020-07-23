@@ -2,14 +2,17 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
+
+const { start } = require('../server/server.js');
 
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
 var players = null;
+var playersInfo = null;
 var hooks = null;
 var playerid = null;
 var world = null;
@@ -329,6 +332,9 @@ let newFrame = (timestamp) => {
   currtime = timestamp - starttime;
   prevtime = timestamp;
 
+  //update world as if server (interpolate)
+  // start(dt);
+
   // calculate fps
   let fps = Math.round(1000 / dt);
   // console.log("fps: ", fps);
@@ -514,9 +520,10 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverHooks) => {
+const serverImage = (serverPlayers, serverPlayersInfo, serverHooks) => {
   if (!players) console.log("too early");
   players = serverPlayers;
+  playersInfo = serverPlayersInfo;
   hooks = serverHooks;
 }
 socket.on('serverimage', serverImage);

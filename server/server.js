@@ -13,7 +13,8 @@ const server = express()
 const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
-const GAME_UPDATE_TIME = 16; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
+const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
+const GAME_SEND_TIME = 100;
 
 const createDummy = false;
 
@@ -993,17 +994,8 @@ io.on('connection', (socket) => {
 // 3. update hooks based on confinement to player, distance to player, and aiming.
 // 4. update hooks based on collisions (only for hooks with !h.to)
 // 5. hole collisions
-var prevtime = null;
-const runGame = () => {
-  if (!prevtime) {
-    prevtime = Date.now();
-    return;
-  }
-  let dt = Date.now() - prevtime;
-  prevtime = Date.now();
-  // console.log("dt:", dt);
 
-
+const updateGame = (dt) => {
   //1.
   for (let hid in hooks) {
     let h = hooks[hid];
@@ -1147,7 +1139,23 @@ const runGame = () => {
       }
     }
   }
-
-  io.volatile.json.emit('serverimage', players, hooks);
 }
-setInterval(runGame, GAME_UPDATE_TIME);
+
+
+var prevtime = null;
+setInterval(() => {
+  if (!prevtime) {
+    prevtime = Date.now();
+    return;
+  }
+  let dt = Date.now() - prevtime;
+  prevtime = Date.now();
+  updateGame(dt);
+}, GAME_UPDATE_TIME);
+
+
+
+setInterval(() => {
+  io.volatile.json.emit('serverimage', players, playersInfo, hooks);
+}, GAME_SEND_TIME);
+
