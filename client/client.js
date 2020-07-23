@@ -6,8 +6,6 @@ const ADDRESS = 'http://192.168.1.204:3001';
 // const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
-const { start } = require('../server/server.js');
-
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
@@ -331,9 +329,6 @@ let newFrame = (timestamp) => {
   let dt = timestamp - prevtime;
   currtime = timestamp - starttime;
   prevtime = timestamp;
-
-  //update world as if server (interpolate)
-  // start(dt);
 
   // calculate fps
   let fps = Math.round(1000 / dt);
