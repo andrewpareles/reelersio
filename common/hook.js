@@ -1,6 +1,4 @@
 const { vec } = require('../common/vector.js');
-const { game } = require('../common/game.js');
-var [players, playersInfo, hooks, world] = game.get();
 const { consts: constsShared } = require('../common/constants.js');
 var {
   hookspeed_reset,
@@ -8,14 +6,13 @@ var {
   a0h,
   b0h,
   c0h,
-  d0h
+  d0h,
+  
 } = constsShared;
 const { consts: constsServer } = require('../server/constantsServer.js');
 var {
   hookspeed_max,
 } = constsServer;
-
-
 
 /** 
  * ---------- Player functions (take in player) ---------- 

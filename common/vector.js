@@ -109,7 +109,7 @@ const parallelComponentSpecial = (qVel, motionDir, minSpeed = -Infinity, maxSpee
   let motionSpeed = multiplier * parallelComponentMagnitude(qVel, motionDir);
   if (motionSpeed < minSpeed) motionSpeed = minSpeed;
   else if (motionSpeed > maxSpeed) motionSpeed = maxSpeed;
-  let motionVec = vec.normalized(motionDir, motionSpeed);
+  let motionVec = normalized(motionDir, motionSpeed);
   return motionVec;
 }
 

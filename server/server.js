@@ -15,15 +15,9 @@ const { game } = require('../common/game.js');
 
 const { consts: constsShared } = require('../common/constants.js');
 var {
-  mapRadius,
   playerRadius,
-  hookRadius_outer,
-  hookRadius_inner,
-  chat_maxMessageLen,
   maxHooksOut,
 } = constsShared;
-
-
 const { player: playerShared } = require('../common/player.js');
 var {
   //aiming
@@ -32,7 +26,6 @@ var {
   //chat
   chatAddMessage,
 } = playerShared;
-
 const { player: playerServer } = require('./playerServer.js');
 var {
   player_create,
@@ -44,7 +37,17 @@ var {
   walk_updateOnPress,
   walk_updateOnRelease,
 } = playerServer;
+const { hook: hookServer } = require('./hookServer.js');
+var {
+  //metadata (helpers)
 
+  hook_deleteAllOwned,
+
+  //hook change state
+  hookThrow,
+
+  hookReel,
+} = hookServer;
 
 const GAME_UPDATE_TIME = 0; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 100;
@@ -245,8 +248,12 @@ var world = {
   holes: generateHoles(),
 };
 
-game.set([players, playersInfo, hooks, world]);
-
+/** ---------- MODULE GLOBAL VARS ---------- */
+global.isClient = false;
+global.players = players;
+global.playersInfo = playersInfo;
+global.hooks = hooks;
+global.world = world;
 
 
 
@@ -357,8 +364,6 @@ const runGame = () => {
   game.update();
 
 }
-
-game.set(players, playersInfo, hooks, world, false);
 
 setInterval(() => {
   runGame();

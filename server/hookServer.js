@@ -1,6 +1,4 @@
 const { vec } = require('../common/vector.js');
-const { game } = require('../common/game.js');
-var [players, playersInfo, hooks, world] = game.get();
 const { consts } = require('../common/constants.js');
 var {
   playerRadius,
@@ -27,19 +25,18 @@ var {
   //called every dt
   hook_reset_velocity_update,
 } = hookShared;
-const { player: playerServer } = require('./playerServer.js');
+const { player: playerShared } = require('../common/player.js');
 var {
   //boost
   boostReset,
   //kb
-  knockbackAdd,
-} = playerServer;
-const { player: playerShared } = require('../common/player.js');
-var {
-  //kb
   knockbackReset,
 } = playerShared;
-
+const { player: playerServer } = require('./playerServer.js');
+// var {
+//   //kb
+//   knockbackAdd,
+// } = playerServer;
 
 
 

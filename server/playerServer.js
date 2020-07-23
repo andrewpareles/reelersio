@@ -1,10 +1,13 @@
 const { vec } = require('../common/vector.js');
 const { game } = require('../common/game.js');
-var [players, playersInfo, hooks, world] = game.get();
-var { generateRandomMapLoc } = game;
-// no shared consts required
+const { consts: constsShared } = require('../common/constants.js');
+var {
+  chat_maxMessages,
+  chat_maxMessageLen,
+} = constsShared;
 const { consts: constsServer } = require('./constantsServer.js');
 var {
+  chat_message_timeout,
   keyVectors,
   knockback_nofriction_timeout,
   knockbackspeed_min,
@@ -23,7 +26,7 @@ var {
 
 
 const createNewPlayerAndInfo = (username, colors, pOptions = {}) => {
-  let startLoc = generateRandomMapLoc();
+  let startLoc = { x: -500, y: 500 };
   let [pCol, hCol, lineCol, bobberCol] = colors;
   return [
     {// PLAYER:
@@ -159,14 +162,6 @@ var recentKeys_insert = (pInfo, key) => {
   }
 }
 
-// stops player from being able to continue / initiate boost (they have to redo as if standing still with no keys pressed yet)
-var boostReset = (pInfo) => {
-  pInfo.boost.Multiplier = 0;
-  pInfo.boost.Dir = null;
-  pInfo.boost.Key = null;
-  pInfo.boost.recentKeys = [];
-  pInfo.boost.recentKeysRepeat = false;
-}
 // creates a boost in direction of key k, with boostMultipler increased by inc
 var boostSet = (pInfo, k, inc) => {
   pInfo.boost.Multiplier += inc;
@@ -280,6 +275,21 @@ var knockbackAdd = (hid, pid) => {
   pInfo.knockback.timeremaining = knockback_nofriction_timeout;
 }
 
+/** ---------- CHAT FUNCTIONS ---------- */
+var chatAddMessage = (pid, msg) => {
+  msg = msg.trim();
+  if (!msg) return;
+  if (msg.length > chat_maxMessageLen) {
+    msg = msg.substring(0, chat_maxMessageLen);
+  }
+  if (players[pid].messages.length === chat_maxMessages) {
+    players[pid].messages.shift();
+    playersInfo[pid].chat.timeouts.shift();
+  }
+
+  players[pid].messages.push(msg);
+  playersInfo[pid].chat.timeouts.push(chat_message_timeout);
+}
 
 exports.player = {
   //create/delete
@@ -288,7 +298,6 @@ exports.player = {
   player_delete,
 
   //boost
-  boostReset,
   boost_updateOnPress,
   boost_updateOnRelease,
 
@@ -299,4 +308,6 @@ exports.player = {
   //kb
   knockbackAdd,
 
+  //chat
+  chatAddMessage,
 }

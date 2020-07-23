@@ -1,10 +1,6 @@
 const { vec } = require('../common/vector.js');
-const { game } = require('../common/game.js');
-var [players, playersInfo, hooks, world] = game.get();
 const { consts } = require('../common/constants.js');
 var {
-  chat_maxMessages,
-  chat_maxMessageLen,
   walkspeed,
   walkspeed_hooked,
   //boost
@@ -20,7 +16,6 @@ var {
 } = consts;
 const { consts: constsServer } = require('../server/constantsServer.js');
 var {
-  chat_message_timeout,
   boostMultEffective_max,
   boostMult_max,
 } = constsServer;
@@ -52,6 +47,16 @@ var player_velocity_update = (pInfo, p) => {
     ans = vec.add(ans, kb);
   }
   p.vel = ans;
+}
+
+
+// stops player from being able to continue / initiate boost (they have to redo as if standing still with no keys pressed yet)
+var boostReset = (pInfo) => {
+  pInfo.boost.Multiplier = 0;
+  pInfo.boost.Dir = null;
+  pInfo.boost.Key = null;
+  pInfo.boost.recentKeys = [];
+  pInfo.boost.recentKeysRepeat = false;
 }
 
 /** ---------- KNOCKBACK FUNCTIONS ---------- */
@@ -102,20 +107,6 @@ var aimingStop = (pid) => {
 
 
 /** ---------- CHAT FUNCTIONS ---------- */
-var chatAddMessage = (pid, msg) => {
-  msg = msg.trim();
-  if (!msg) return;
-  if (msg.length > chat_maxMessageLen) {
-    msg = msg.substring(0, chat_maxMessageLen);
-  }
-  if (players[pid].messages.length === chat_maxMessages) {
-    players[pid].messages.shift();
-    playersInfo[pid].chat.timeouts.shift();
-  }
-
-  players[pid].messages.push(msg);
-  playersInfo[pid].chat.timeouts.push(chat_message_timeout);
-}
 
 var chatRemoveMessage = (pid) => {
   players[pid].messages.shift();
@@ -134,6 +125,7 @@ var chat_message_timeout_decay = (pid, dt) => {
 
 exports.player = {
   //player
+  boostReset,
   boost_decay,
   player_velocity_update,
   //kb
@@ -143,7 +135,6 @@ exports.player = {
   aimingStart,
   aimingStop,
   //chat
-  chatAddMessage,
   chat_message_timeout_decay,
 
 }

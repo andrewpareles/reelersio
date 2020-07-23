@@ -7,23 +7,61 @@ var {
   aimingspeed_hooked,
   hookCutoffDistance,
 } = constsShared;
-
-
-var players = {};
-var playersInfo = {};
-var hooks = {};
-var hooksInfo = {};
-var world = {};
-var isClient;
-
-const set = (ps, pIs, hs, w, client) => {
-  [players, playersInfo, hooks, world] = [ps, pIs, hs, w];
-  isClient = client;
+var playerServer, hookServer;
+if (!global.isClient) {
+  let { player: ps } = require('../server/playerServer.js');
+  let { hook: hs } = require('../server/hookServer.js');
+  playerServer = ps;
+  hookServer = hs;
 }
+var {
+  //kb
+  knockbackAdd,
+} = playerServer;
+var {
+  //create
+  createNewHook,
 
-const get = () => {
-  return [players, playersInfo, hooks, world];
-}
+  //metadata (helpers)
+  hook_StartReelingPlayer,
+  hook_resetAllOwned,
+  hook_resetAllAttached,
+  hook_deleteAllOwned,
+
+  //hook change state
+  hookThrow,
+  hookResetInit,
+  hookDetach,
+  hookAttach,
+  hookReel,
+  hookDelete,
+} = hookServer;
+const { player: playerShared } = require('../common/player.js');
+var {
+  boostReset,
+  boost_decay,
+  player_velocity_update,
+  //kb
+  knockback_timeout_decay,
+  //chat
+  chat_message_timeout_decay,
+} = playerShared;
+const { hook: hookShared } = require('../common/hook.js');
+var {
+  getHookedBy,
+  getAttachedTo,
+  getHookFrom_To_,
+
+  //metadata (helpers)
+  hook_StopReelingPlayer,
+
+  //called every dt
+  reel_cooldown_decay,
+  throw_cooldown_decay,
+  reel_nofriction_timeout_decay,
+  hook_reset_velocity_update,
+} = hookShared;
+
 
 
 const generateRandomMapLoc = () => {
@@ -188,8 +226,6 @@ const update = (dt) => {
 }
 
 exports.game = {
-  set,
-  get,
   update,
   generateRandomMapLoc,
 

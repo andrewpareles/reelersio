@@ -19,11 +19,11 @@ var {
 /** ---------- GAME CONSTANTS ----------
  */
 var playerid = null;
-
-var players = null;
-var playersInfo = null;
-var hooks = null;
-var world = null;
+global.isClient = true;
+global.players = {};
+global.playersInfo = {};
+global.hooks = {};
+global.world = {};
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -503,11 +503,10 @@ const whenConnect = async () => {
   // 1. tell server I'm a new player
   const joinCallback = (serverPlayers, serverPlayersInfo, serverHooks, serverWorld) => {
     playerid = socket.id;
-    game.set(serverPlayers, serverPlayersInfo, serverHooks, serverWorld, true);
-    players = serverPlayers;
-    playersInfo = serverPlayersInfo;
-    hooks = serverHooks;
-    world = serverWorld;
+    global.players = serverPlayers;
+    global.playersInfo = serverPlayersInfo;
+    global.hooks = serverHooks;
+    global.world = serverWorld;
   };
   await send.join(joinCallback);
 
@@ -527,10 +526,9 @@ socket.on('connect', whenConnect);
 
 const serverImage = (serverPlayers, serverPlayersInfo, serverHooks) => {
   if (!players) console.log("too early");
-  game.set(serverPlayers, serverPlayersInfo, serverHooks, world, true);
-  players = serverPlayers;
-  playersInfo = serverPlayersInfo;
-  hooks = serverHooks;
+  global.players = serverPlayers;
+  global.playersInfo = serverPlayersInfo;
+  global.hooks = serverHooks;
 }
 socket.on('serverimage', serverImage);
 
