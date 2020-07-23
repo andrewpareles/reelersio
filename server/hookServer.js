@@ -27,14 +27,14 @@ var {
   //called every dt
   hook_reset_velocity_update,
 } = hookShared;
-const { player: playerServer } = require('./playerServer.js')
+const { player: playerServer } = require('./playerServer.js');
 var {
   //boost
   boostReset,
   //kb
   knockbackAdd,
 } = playerServer;
-const { player: playerShared } = require('../common/player.js')
+const { player: playerShared } = require('../common/player.js');
 var {
   //kb
   knockbackReset,

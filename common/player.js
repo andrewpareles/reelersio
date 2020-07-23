@@ -18,7 +18,7 @@ var {
   c0k,
   d0k
 } = consts;
-const { consts: constsServer } = require('./constantsServer');
+const { consts: constsServer } = require('../server/constantsServer.js');
 var {
   chat_message_timeout,
   boostMultEffective_max,

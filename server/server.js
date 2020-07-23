@@ -23,6 +23,16 @@ var {
   maxHooksOut,
 } = constsShared;
 
+
+const { player: playerShared } = require('../common/player.js');
+var {
+  //aiming
+  aimingStart,
+  aimingStop,
+  //chat
+  chatAddMessage,
+} = playerShared;
+
 const { player: playerServer } = require('./playerServer.js');
 var {
   player_create,

@@ -9,11 +9,11 @@ var {
 } = constsShared;
 
 
-var players;
-var playersInfo;
-var hooks;
-var hooksInfo;
-var world;
+var players = {};
+var playersInfo = {};
+var hooks = {};
+var hooksInfo = {};
+var world = {};
 var isClient;
 
 const set = (ps, pIs, hs, w, client) => {
