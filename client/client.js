@@ -1,24 +1,29 @@
 //https://socket.io/docs/client-api/
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
-
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const { game } = require('../common/game.js');
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
+const { consts } = require('../common/constants.js');
+var {
+  mapRadius,
+  playerRadius,
+  hookRadius_outer,
+  hookRadius_inner,
+  chat_maxMessages: maxMessages,
+  chat_maxMessageLen: maxMessageLen,
+} = consts;
+
 
 /** ---------- GAME CONSTANTS ----------
- * these are initialized by server after player joins
  */
-var players = null;
-var hooks = null;
 var playerid = null;
-var world = null;
 
-var playerRadius = null;
-var hookRadius_outer = null;
-var hookRadius_inner = null;
-var mapRadius = null;
-var maxMessageLen = null;
+var players = null;
+var playersInfo = null;
+var hooks = null;
+var world = null;
 
 // up, down, left, right
 var keysPressedLocal = new Set();
@@ -70,8 +75,6 @@ var send = {
     socket.emit('chatmessage', msg);
   },
 }
-
-
 
 /** ---------- CHAT ---------- */
 var isChatting = false;
@@ -316,7 +319,10 @@ var playerCamera = {
 }
 
 
-/** ---------- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ---------- */
+/** ---------- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ----------  
+ * Run the game as if you're the server (but obviously without constant updates. No creating/deleting.)
+*/
+
 var prevtime;
 var starttime;
 var currtime;
@@ -328,6 +334,9 @@ let newFrame = (timestamp) => {
   let dt = timestamp - prevtime;
   currtime = timestamp - starttime;
   prevtime = timestamp;
+
+  // UPDATE GAME AS IF SERVER
+  game.update(dt);
 
   // calculate fps
   let fps = Math.round(1000 / dt);
@@ -492,19 +501,21 @@ window.addEventListener('resize', () => {
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
-  const joinCallback = (...serverInfo) => {
+  const joinCallback = (serverPlayers, serverPlayersInfo, serverHooks, serverWorld) => {
     playerid = socket.id;
-    [players, hooks, world, playerRadius, hookRadius_outer,
-      hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
+    game.set(serverPlayers, serverPlayersInfo, serverHooks, serverWorld, true);
+    players = serverPlayers;
+    playersInfo = serverPlayersInfo;
+    hooks = serverHooks;
+    world = serverWorld;
   };
   await send.join(joinCallback);
 
   console.log("playerid", playerid);
   console.log("players", players);
+  console.log("playersInfo", playersInfo);
   console.log("hooks", hooks);
   console.log("world", world);
-  console.log("playerRadius", playerRadius);
-  console.log("hookRadius", hookRadius_outer);
 
   // once get here, know that everything is defined, so can start rendering  
   // 2. start game
@@ -514,9 +525,11 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverHooks) => {
+const serverImage = (serverPlayers, serverPlayersInfo, serverHooks) => {
   if (!players) console.log("too early");
+  game.set(serverPlayers, serverPlayersInfo, serverHooks, world, true);
   players = serverPlayers;
+  playersInfo = serverPlayersInfo;
   hooks = serverHooks;
 }
 socket.on('serverimage', serverImage);

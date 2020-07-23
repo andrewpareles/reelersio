@@ -102,6 +102,23 @@ const orthogonalComponent = (a, b) => {
   return sub(a, parallelComponent(a, b));
 }
 
+// returns qVel projected on motionDir
+// minSpeed is the minimum speed that can be returned (if it would return 0, return motionDir with speed minSpeed. same idea for maxSpeed)
+// multiplier is the multiplier for the projected velocity
+const parallelComponentSpecial = (qVel, motionDir, minSpeed = -Infinity, maxSpeed = Infinity, multiplier = 1) => {
+  let motionSpeed = multiplier * parallelComponentMagnitude(qVel, motionDir);
+  if (motionSpeed < minSpeed) motionSpeed = minSpeed;
+  else if (motionSpeed > maxSpeed) motionSpeed = maxSpeed;
+  let motionVec = vec.normalized(motionDir, motionSpeed);
+  return motionVec;
+}
+
+
+//rotates a to direction of b, keeping a's magnitude
+const rotateTo = (a, b) => {
+  return normalized(b, magnitude(a));
+}
+
 exports.vec = {
   add: add,
   weightedSum: weightedSum,
@@ -121,6 +138,8 @@ exports.vec = {
   parallelComponent: parallelComponent,
   parallelComponentMagnitude: parallelComponentMagnitude,
   orthogonalComponent: orthogonalComponent,
+  parallelComponentSpecial: parallelComponentSpecial,
+  rotateTo: rotateTo,
   zero: zero,
 
 }
