@@ -156,6 +156,7 @@ const playerHookColorPalette = generateColorPalette();
 //better aiming cancels boost
 //hook deflection on border
 //while reeling, slow down?
+//decrease hookspeed so it's easier to dodge
 
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
@@ -1156,6 +1157,9 @@ setInterval(() => {
 
 
 setInterval(() => {
-  io.volatile.json.emit('serverimage', players, playersInfo, hooks);
+  io.volatile.json.emit('serverimage', players, hooks);
+  for (pid in players) {
+    //send each player information specific to themselves
+  }
 }, GAME_SEND_TIME);
 

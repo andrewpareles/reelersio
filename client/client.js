@@ -10,7 +10,6 @@ const socket = io(ADDRESS);
  * these are initialized by server after player joins
  */
 var players = null;
-var playersInfo = null;
 var hooks = null;
 var playerid = null;
 var world = null;
@@ -515,10 +514,9 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverPlayersInfo, serverHooks) => {
+const serverImage = (serverPlayers, serverHooks) => {
   if (!players) console.log("too early");
   players = serverPlayers;
-  playersInfo = serverPlayersInfo;
   hooks = serverHooks;
 }
 socket.on('serverimage', serverImage);
