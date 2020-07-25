@@ -20,8 +20,11 @@ var hookRadius_inner = null;
 var mapRadius = null;
 var maxMessageLen = null;
 
+
+// LOCAL VARIABLES:
 // up, down, left, right
 var keysPressedLocal = new Set();
+var mouseX = 0, mouseY = 0;
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -237,6 +240,20 @@ var playerCamera = {
     c.stroke();
 
 
+    // draw rod
+    if (players[pid].tipOfRodDir) {
+      let tipOfRodScreen = getPosOnScreen(vec.add(players[pid].loc, players[pid].tipOfRodDir));
+      let armDir = vec.normalized(vec.rotatedByTheta(players[pid].tipOfRodDir, -Math.PI / 2), playerRadius);
+      let armLocScreen = getPosOnScreen(vec.add(players[pid].loc, armDir));
+      c.beginPath();
+      c.strokeStyle = 'brown';
+      c.lineWidth = 5 / camZoom;
+      c.moveTo(armLocScreen.x, armLocScreen.y);
+      c.lineTo(tipOfRodScreen.x, tipOfRodScreen.y);
+      c.stroke();
+
+    }
+
     //draw chat messages:
     let n = 1;
     if (pid === socket.id && isChatting) {
@@ -271,7 +288,7 @@ var playerCamera = {
   },
 
   drawHook: (hid, pid_from) => {
-    let ploc = getPosOnScreen(players[pid_from].loc);
+    let tipOfRodScreen = getPosOnScreen(vec.add(players[pid_from].loc, players[pid_from].tipOfRodDir));
     let hloc = getPosOnScreen(hooks[hid].loc);
     let [hcol, linecol, bobbercol] = hooks[hid].colors;
     let outer_lw = 2 / camZoom;
@@ -280,7 +297,7 @@ var playerCamera = {
     c.beginPath();
     c.lineWidth = 1 / camZoom;
     c.strokeStyle = linecol;
-    c.moveTo(ploc.x, ploc.y);
+    c.moveTo(tipOfRodScreen.x, tipOfRodScreen.y);
     c.lineTo(hloc.x, hloc.y);
     c.stroke();
 
@@ -410,6 +427,7 @@ document.addEventListener('keydown', function (event) {
         if (isChatting) {
           chatMsg = chatMsg.trim();
           if (chatMsg) send.chatmessage(chatMsg);
+          players[playerid].messages = [chatMsg].concat(players[playerid].messages);
           isChatting = false;
           chatMsg = "";
         }
@@ -447,13 +465,16 @@ document.addEventListener('keyup', function (event) {
   }
 });
 
-
+//dir with respect to player
+var getPlayerToMouse = () => {
+  let mousePos = { x: mouseX - canv_left, y: -(mouseY - canv_top) };
+  return vec.sub(mousePos, midScreen); //points from player to mouse
+}
 document.addEventListener('mousedown', function (event) {
   switch (event.button) {
     //left click:
     case 0:
-      let mousePos = { x: event.clientX - canv_left, y: -(event.clientY - canv_top) };
-      let hookDir = vec.sub(mousePos, midScreen); //points from player to mouse
+      let hookDir = getPlayerToMouse();
       send.leftclick(hookDir);
       break;
     //right click
@@ -463,6 +484,15 @@ document.addEventListener('mousedown', function (event) {
 
   }
 });
+
+
+
+document.addEventListener('mousemove', function (event) {
+  mouseX = event.clientX;
+  mouseY = event.clientY;
+});
+
+
 
 const zoomMin = 1 / 100;
 const zoomMax = 100;
@@ -520,6 +550,16 @@ const serverImage = (serverPlayers, serverHooks) => {
   hooks = serverHooks;
 }
 socket.on('serverimage', serverImage);
+
+
+
+
+const requestFacingDir = (callback) => {
+  let facingDir = getPlayerToMouse();
+  callback(facingDir);
+}
+socket.on('requestfacingdirection', requestFacingDir);
+
 
 
 socket.on('connect_error', (error) => {

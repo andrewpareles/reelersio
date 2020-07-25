@@ -102,25 +102,30 @@ const orthogonalComponent = (a, b) => {
   return sub(a, parallelComponent(a, b));
 }
 
+const rotatedByTheta = (a, theta) => {
+  return { x: a.x * Math.cos(theta) + a.y * -Math.sin(theta), y: a.x * Math.sin(theta) + a.y * Math.cos(theta) };
+}
+
 exports.vec = {
-  add: add,
-  weightedSum: weightedSum,
-  negative: negative,
-  sub: sub,
-  scalar: scalar,
-  magnitude: magnitude,
-  equals: equals,
-  nonzero: nonzero,
-  normalized: normalized,
-  dot: dot,
-  isCollided: isCollided,
-  isContaining: isContaining,
-  average: average,
-  apply: apply,
-  crossMagnitude: crossMagnitude,
-  parallelComponent: parallelComponent,
-  parallelComponentMagnitude: parallelComponentMagnitude,
-  orthogonalComponent: orthogonalComponent,
-  zero: zero,
+  add,
+  weightedSum,
+  negative,
+  sub,
+  scalar,
+  magnitude,
+  equals,
+  nonzero,
+  normalized,
+  dot,
+  isCollided,
+  isContaining,
+  average,
+  apply,
+  crossMagnitude,
+  parallelComponent,
+  parallelComponentMagnitude,
+  orthogonalComponent,
+  rotatedByTheta,
+  zero,
 
 }

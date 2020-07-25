@@ -15,15 +15,17 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 16;
+const GAME_REQUEST_TIME = 16;
 
 const createDummy = false;
-
 const numHoles = 100;
+
 const mapRadius = 5000;
 const playerRadius = 40; //pix
 const hookRadius_outer = 10; //circle radius (PURELY COSMETIC, ONLY CENTER OF HOOK MATTERS)
 const hookRadius_inner = .7 * (hookRadius_outer / Math.sqrt(2)); //inner hook radius (square radius, not along diagonal) (PURELY COSMETIC)
 
+const rodDistance = 80; // length of rod away from player (scales linearly if player grows)
 const hookCutoffDistance = 1000; //based on center of player and center of hook
 const maxHooksOut = 2; //per player
 const throw_cooldown = 100; //ms
@@ -158,6 +160,18 @@ const playerHookColorPalette = generateColorPalette();
 //while reeling, slow down?
 //decrease hookspeed so it's easier to dodge
 
+
+
+
+
+
+
+/** ---------- GAME CONSTANTS ---------- */
+//playerid (= socket.id) -> socket
+var sockets = {};
+
+
+
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
   /*
@@ -167,7 +181,8 @@ var players = {
 
       username: "billybob",
       color: "orange",
-      messages:[m0, m1, ...]
+      messages:[m0, m1, ...],
+      tipOfRodDir:, //this plus playerloc = location of tip of rod
     }
     */
 };
@@ -618,6 +633,10 @@ var generateHID = () => {
 }
 
 
+var getTipOfRodLoc = (pid) => {
+  return vec.add(players[pid].loc, players[pid].tipOfRodDir);
+}
+
 // returns [hook id, hook object]
 var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
@@ -628,7 +647,7 @@ var createNewHook = (pid_from, throwDir) => {
   let hook = {
     from: pid_from,
     to: null,
-    loc: vec.add(p.loc, vec.normalized(throwDir, playerRadius)),
+    loc: getTipOfRodLoc(pid_from), //vec.add(p.loc, vec.normalized(throwDir, playerRadius)),
     vel: hookVel,
     isResetting: false,
     reelingPlayer: null,
@@ -643,7 +662,7 @@ var createNewHook = (pid_from, throwDir) => {
 //updates velocity for when hook is in isResetting mode
 // should call hookResetInit before running this...
 var hook_reset_velocity_update = (h) => {
-  let reelDir = vec.sub(players[h.from].loc, h.loc);
+  let reelDir = vec.sub(getTipOfRodLoc(h.from), h.loc);
   h.vel = vec.normalized(reelDir, hookspeed_reset);
 }
 
@@ -717,8 +736,8 @@ var hookReel = (pid) => {
       for (let hid2 of getAttached(h.to)) {
         hookStopReelingPlayer(hooks[hid2]);
       }
-      let reelDir = vec.sub(players[h.from].loc, h.loc);
-      let hookVel = projectedVelocityInDirection(players[h.from].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
+      let reelDir = vec.sub(getTipOfRodLoc(pid), h.loc);
+      let hookVel = projectedVelocityInDirection(players[pid].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
       hookStartReelingPlayer(pid, hid, hookVel);
       // also reset knockback of player
       knockbackReset(playersInfo[h.to]);
@@ -860,6 +879,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       username: username,
       color: pCol,
       messages: [],
+      tipOfRodDir: { x: rodDistance, y: 0 },
       ...pOptions,
     },
     // PLAYER INFO:
@@ -903,6 +923,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
 // fired when client connects
 io.on('connection', (socket) => {
   console.log("player joining:", socket.id);
+  sockets[socket.id] = socket;
 
   //set what server does on different events
   socket.on('join', (username, callback) => {
@@ -1084,47 +1105,57 @@ const updateGame = (dt) => {
 
 
   //4. 
+  // --- HANDLE COLLISIONS OF HOOKS NOT YET ATTACHED (!h.to) ---
   for (let pid in players) { //pid = player to be hooked
     for (let hid in hooks) {
       let h = hooks[hid];
-      // --- HANDLE COLLISIONS OF HOOKS NOT YET ATTACHED (!h.to) ---
       if (!h.to) {
-        //player has exited hook, so remove it from waitTillExit
-        if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius_outer)) {
-          h.waitTillExit.delete(pid);
-        }
-        // if colliding and not in waitTillExit and not taken care of
-        else if (!h.waitTillExit.has(pid)) {
-          //if player colliding with their own hook, delete
-          if (h.from === pid && !h.to) {
+        //if player owns the hook
+        if (h.from === pid) {
+          let rodTipLoc = getTipOfRodLoc(pid);
+          if (!vec.isCollided(rodTipLoc, h.loc, 0, hookRadius_outer)) {
+            h.waitTillExit.delete(pid);
+          }
+          //if !waitTillExit
+          else if (!h.waitTillExit.has(pid)) {
+            //if player reeled in their own hook, delete
             playersInfo[pid].hooks.throw_cooldown = null;
             hookDelete(hid);
           }
-          // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
-          else if (getHookedBy(pid).has(h.from)) {
-            //reset old attached hook, and attach the new hook 
-            let oldhook = getHookFrom_To_(h.from, pid);
-            hookResetInit(oldhook, true);
-            hookAttach(hid, pid);
+        } //end if (h.from === pid)
+        else {
+          //player has exited hook, so remove it from waitTillExit
+          if (!vec.isCollided(players[pid].loc, h.loc, playerRadius, hookRadius_outer)) {
+            h.waitTillExit.delete(pid);
           }
-          //if two players hook each other, delete both hooks and knock each other back
-          else if (getAttachedTo(pid).has(h.from)) {
-            let hook_to_hfrom = getHookFrom_To_(pid, h.from);
-            hookDelete(hook_to_hfrom);
-            knockbackAdd(hid, pid);
+          // if colliding and not in waitTillExit and not taken care of
+          else if (!h.waitTillExit.has(pid)) {
+            // if the hook's owner is already hooking this player, it shouldnt have 2 hooks on the same player
+            if (getHookedBy(pid).has(h.from)) {
+              //reset old attached hook, and attach the new hook 
+              let oldhook = getHookFrom_To_(h.from, pid);
+              hookResetInit(oldhook, true);
+              hookAttach(hid, pid);
+            }
+            //if two players hook each other, delete both hooks and knock each other back
+            else if (getAttachedTo(pid).has(h.from)) {
+              let hook_to_hfrom = getHookFrom_To_(pid, h.from);
+              hookDelete(hook_to_hfrom);
+              knockbackAdd(hid, pid);
+              hookDelete(hid);
+            }
+            // otherwise, just attach the hook!
+            else {
+              hookAttach(hid, pid);
+            }
+          }
+          //if colliding with sender and resetting, delete hook (takes care of quickreel problem)
+          else if (h.isResetting && h.from === pid) {
             hookDelete(hid);
           }
-          // otherwise, just attach the hook!
-          else {
-            hookAttach(hid, pid);
-          }
-        }
-        //if colliding with sender and resetting, delete hook (takes care of quickreel problem)
-        else if (h.isResetting && h.from === pid) {
-          hookDelete(hid);
-        }
-      } //end for (hooks)
-    } //end if (!h.to)
+        } //end if (pid !== h.from)
+      } //end if (!h.to)
+    } //end for (hooks)
   } //end for (players)
 
 
@@ -1143,6 +1174,8 @@ const updateGame = (dt) => {
 }
 
 
+
+
 var prevtime = null;
 setInterval(() => {
   if (!prevtime) {
@@ -1156,10 +1189,26 @@ setInterval(() => {
 
 
 
+
 setInterval(() => {
-  io.volatile.json.emit('serverimage', players, hooks);
-  for (pid in players) {
+  // io.volatile.json.emit('serverimage', players, hooks);
+  for (let playerid in players) {
     //send each player information specific to themselves
+    sockets[playerid].emit('serverimage', players, hooks);
   }
 }, GAME_SEND_TIME);
 
+
+
+var facingDirCallback = (playerid) => {
+  return (newDir) => {
+    if (newDir.x && typeof (newDir.x) === 'number' && newDir.y && typeof (newDir.y) === 'number')
+      players[playerid].tipOfRodDir = vec.normalized({ x: newDir.x, y: newDir.y }, playerRadius + rodDistance);
+  };
+}
+
+setInterval(() => {
+  for (let playerid in players) {
+    sockets[playerid].emit('requestfacingdirection', facingDirCallback(playerid));
+  }
+}, GAME_REQUEST_TIME);
