@@ -103,7 +103,9 @@ const orthogonalComponent = (a, b) => {
 }
 
 const rotatedByTheta = (a, theta) => {
-  return { x: a.x * Math.cos(theta) + a.y * -Math.sin(theta), y: a.x * Math.sin(theta) + a.y * Math.cos(theta) };
+  let cos = Math.cos(theta);
+  let sin = Math.sin(theta);
+  return { x: a.x * cos + a.y * -sin, y: a.x * sin + a.y * cos };
 }
 
 exports.vec = {
