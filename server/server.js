@@ -194,15 +194,19 @@ var playersInfo = {
       //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
       "constants": {
         score,
+
+        //metrics
         kills,
         deaths,
+        timeAlive,
+
+        // metadata 
+        walkspeed,
+        boost,
+        radius,
         rodDistance,
         hookCutoffDistance,
-        
-        
-        walkspeed,
-        boost
-        radius,
+
       },
       boost: {
         Dir: null, // direction of the boost (null iff no boost)
@@ -1135,8 +1139,8 @@ const updateGame = (dt) => {
           }
           //if colliding with sender and resetting, delete hook (takes care of quickreel problem)
           else if (h.isResetting) {
-              hookDelete(hid);
-            }
+            hookDelete(hid);
+          }
         } //end if (h.from === pid)
         else {
           //player has exited hook, so remove it from waitTillExit
