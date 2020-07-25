@@ -192,6 +192,18 @@ var playersInfo = {
   /*
     "initialPlayer (socket.id)": {
       //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
+      "constants": {
+        score,
+        kills,
+        deaths,
+        rodDistance,
+        hookCutoffDistance,
+        
+        
+        walkspeed,
+        boost
+        radius,
+      },
       boost: {
         Dir: null, // direction of the boost (null iff no boost)
         Key: null, // key that needs to be held down for current boost to be active
@@ -199,7 +211,6 @@ var playersInfo = {
         recentKeys: [], //[2nd, 1st most recent key pressed] (these are unique, if a user presses same key twice then no update, just set recentKeysRepeat to true)
         recentKeysRepeat: false,
       },
-  
       walk: {
         directionPressed: { x: 0, y: 0 }, //NON-NORMALIZED. This multiplies walkspeed to give a walking velocity vector (which adds to the boost vector)
         keysPressed: new Set(), // contains 'up', 'down', 'left', and 'right'
@@ -471,8 +482,8 @@ var boost_decay = (pInfo, dt) => {
 }
 
 //calculate velocity
-var player_velocity_update = (pInfo, p, followHook) => {
-  let speed = followHook ? walkspeed_hooked : walkspeed;
+var player_velocity_update = (pInfo, p) => {
+  let speed = pInfo.hooks.followHook ? walkspeed_hooked : walkspeed;
   let walk = vec.normalized(pInfo.walk.directionPressed, speed);
 
   let ans = walk;
@@ -1045,7 +1056,7 @@ const updateGame = (dt) => {
     // boost decay & kb decay & update velocity
     boost_decay(pInfo, dt);
     if (pInfo.knockback.dir) knockback_timeout_decay(pInfo, dt);
-    player_velocity_update(pInfo, p, pInfo.hooks.followHook);
+    player_velocity_update(pInfo, p);
     // update player location (even if hooked, lets player walk within hook bubble)
     p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
 
@@ -1122,6 +1133,10 @@ const updateGame = (dt) => {
             playersInfo[pid].hooks.throw_cooldown = null;
             hookDelete(hid);
           }
+          //if colliding with sender and resetting, delete hook (takes care of quickreel problem)
+          else if (h.isResetting) {
+              hookDelete(hid);
+            }
         } //end if (h.from === pid)
         else {
           //player has exited hook, so remove it from waitTillExit
@@ -1148,10 +1163,6 @@ const updateGame = (dt) => {
             else {
               hookAttach(hid, pid);
             }
-          }
-          //if colliding with sender and resetting, delete hook (takes care of quickreel problem)
-          else if (h.isResetting && h.from === pid) {
-            hookDelete(hid);
           }
         } //end if (pid !== h.from)
       } //end if (!h.to)
