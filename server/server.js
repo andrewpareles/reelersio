@@ -80,7 +80,6 @@ const generateRandomLoc = () => {
   let theta = Math.random() * 2 * Math.PI;
   let pos = { x: r * Math.cos(theta), y: -r * Math.sin(theta) };
   return pos;
-  // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
 }
 
 /** ---------- PLAYER COLORS ---------- */
@@ -649,13 +648,12 @@ var getTipOfRodLoc = (pid) => {
 }
 
 // returns [hook id, hook object]
-var createNewHook = (pid_from, throwTowards) => {
+var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
   let hookColors = playersInfo[pid_from].hooks.defaultColors;
-  let hookVelDir = vec.sub(throwTowards, getTipOfRodLoc(pid_from));
   let hookVel = playersInfo[pid_from].hooks.attached.size > 0 ?
     vec.normalized(hookVelDir, hookspeed_hooked)
-    : vec.projectedVelocityInDirection(p.vel, hookVelDir, hookspeed_min, hookspeed_max);
+    : vec.projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
   let hook = {
     from: pid_from,
     to: null,
@@ -709,8 +707,8 @@ var hookDetach = (hid, setWaitTillExit) => {
     playersInfo[h.from].hooks.reel_cooldown = null;
 }
 
-var hookThrow = (pid_from, hookLoc) => {
-  let [hid, hook] = createNewHook(pid_from, hookLoc);
+var hookThrow = (pid_from, hookDir) => {
+  let [hid, hook] = createNewHook(pid_from, hookDir);
   hooks[hid] = hook;
   hook.waitTillExit.add(pid_from);
   getOwned(pid_from).add(hid);
@@ -979,13 +977,13 @@ io.on('connection', (socket) => {
   });
 
 
-  socket.on('leftclick', (hookLoc) => {// hookDir is {x, y}
+  socket.on('leftclick', (hookDir) => {// hookDir is {x, y}
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.throw_cooldown) {
       //throw a new hook
       if (pInfo.hooks.owned.size < maxHooksOut)
-        hookThrow(socket.id, hookLoc);
+        hookThrow(socket.id, hookDir);
     }
   });
 

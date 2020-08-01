@@ -54,8 +54,8 @@ var send = {
   stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
     socket.emit('stopindirection', direction);
   },
-  leftclick: (hookLoc) => {
-    socket.emit('leftclick', hookLoc);
+  leftclick: (hookDir) => {
+    socket.emit('leftclick', hookDir);
   },
   rightclick: () => {
     socket.emit('rightclick');
@@ -238,6 +238,7 @@ var playerCamera = {
 
   drawPlayer: (pid) => {
     let color = players[pid].color;
+    let rodColor = 'brown';
     let loc = getPosOnScreen(players[pid].loc);
 
     c.beginPath();
@@ -253,7 +254,7 @@ var playerCamera = {
       let armDir = vec.normalized(vec.rotatedByTheta(players[pid].tipOfRodDir, -Math.PI / 2), playerRadius);
       let armLocScreen = getPosOnScreen(vec.add(players[pid].loc, armDir));
       c.beginPath();
-      c.strokeStyle = 'brown';
+      c.strokeStyle = rodColor;
       c.lineWidth = 5 / camZoom;
       c.moveTo(armLocScreen.x, armLocScreen.y);
       c.lineTo(tipOfRodScreen.x, tipOfRodScreen.y);
@@ -472,7 +473,7 @@ document.addEventListener('keyup', function (event) {
   }
 });
 
-//dir with respect to camLoc (midscreen), flipping y so it's in world coords
+//dir with respect to camLoc (midscreen), in screen coords
 var getMidScreenToMouse = () => {
   let mousePos = { x: mouseX - canv_left, y: mouseY - canv_top };
   return vec.sub(mousePos, midScreen); //points from midscreen to mouse
@@ -485,8 +486,9 @@ document.addEventListener('mousedown', function (event) {
   switch (event.button) {
     //left click:
     case 0:
-      let hookLoc = getMousePosInWorld();
-      send.leftclick(hookLoc);
+      let hookDir = getMidScreenToMouse();
+      let hookDirWorldCoords = { x: hookDir.x, y: -hookDir.y };
+      send.leftclick(hookDirWorldCoords);
       break;
     //right click
     case 2:
