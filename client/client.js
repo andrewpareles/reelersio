@@ -250,9 +250,11 @@ var playerCamera = {
 
 
     // draw rod
-    if (players[pid].tipOfRodDir) {
-      let tipOfRodScreen = getPosOnScreen(vec.add(players[pid].loc, players[pid].tipOfRodDir));
-      let armDir = vec.normalized(vec.rotatedByTheta(players[pid].tipOfRodDir, -Math.PI / 2), playerRadius);
+    if (players[pid].tipOfRodLoc) {
+      let tipOfRodScreen = getPosOnScreen(players[pid].tipOfRodLoc);
+      let facingDir = vec.sub(tipOfRodScreen, midScreen);
+      let armDir = vec.normalized(vec.rotatedByTheta(facingDir, Math.PI / 2), playerRadius);
+      armDir = { x: armDir.x, y: -armDir.y };
       let armLocScreen = getPosOnScreen(vec.add(players[pid].loc, armDir));
       c.beginPath();
       c.strokeStyle = rodColor;
@@ -297,7 +299,7 @@ var playerCamera = {
   },
 
   drawHook: (hid, pid_from) => {
-    let tipOfRodScreen = getPosOnScreen(vec.add(players[pid_from].loc, players[pid_from].tipOfRodDir));
+    let tipOfRodScreen = getPosOnScreen(players[pid_from].tipOfRodLoc);
     let hloc = getPosOnScreen(hooks[hid].loc);
     let [hcol, linecol, bobbercol] = hooks[hid].colors;
     let outer_lw = 2 / camZoom;

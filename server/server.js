@@ -170,7 +170,7 @@ var players = {
       username: "billybob",
       color: "orange",
       messages:[m0, m1, ...],
-      tipOfRodDir:, //this plus playerloc = location of tip of rod
+      tipOfRodLoc:, location in world of tip of rod
     }
     */
 };
@@ -643,8 +643,8 @@ var generateHID = () => {
 }
 
 
-var getTipOfRodLoc = (pid) => {
-  return vec.add(players[pid].loc, players[pid].tipOfRodDir);
+var calculateTipOfRodLoc = (pLoc, rodDir) => {
+  return vec.add(pLoc, vec.normalized(rodDir, playerRadius + rodDistance));
 }
 
 // returns [hook id, hook object]
@@ -657,7 +657,7 @@ var createNewHook = (pid_from, throwDir) => {
   let hook = {
     from: pid_from,
     to: null,
-    loc: getTipOfRodLoc(pid_from), //vec.add(p.loc, vec.normalized(throwDir, playerRadius)),
+    loc: players[pid_from].tipOfRodLoc, //vec.add(p.loc, vec.normalized(throwDir, playerRadius)),
     vel: hookVel,
     isResetting: false,
     reelingPlayer: null,
@@ -672,7 +672,7 @@ var createNewHook = (pid_from, throwDir) => {
 //updates velocity for when hook is in isResetting mode
 // should call hookResetInit before running this...
 var hook_reset_velocity_update = (h) => {
-  let reelDir = vec.sub(getTipOfRodLoc(h.from), h.loc);
+  let reelDir = vec.sub(players[h.from].tipOfRodLoc, h.loc);
   h.vel = vec.normalized(reelDir, hookspeed_reset);
 }
 
@@ -746,7 +746,7 @@ var hookReel = (pid) => {
       for (let hid2 of getAttached(h.to)) {
         hookStopReelingPlayer(hooks[hid2]);
       }
-      let reelDir = vec.sub(getTipOfRodLoc(pid), h.loc);
+      let reelDir = vec.sub(players[h.from].tipOfRodLoc, h.loc);
       let hookVel = vec.projectedVelocityInDirection(players[pid].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
       hookStartReelingPlayer(pid, hid, hookVel);
       // also reset knockback of player
@@ -881,7 +881,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       username: username,
       color: pCol,
       messages: [],
-      tipOfRodDir: { x: rodDistance, y: 0 },
+      tipOfRodLoc: calculateTipOfRodLoc(startLoc, { x: 1, y: 0 }),
       ...pOptions,
     },
     // PLAYER INFO:
@@ -1125,8 +1125,7 @@ const updateGame = (dt) => {
       if (!h.to) {
         //if player owns the hook
         if (h.from === pid) {
-          let rodTipLoc = getTipOfRodLoc(pid);
-          if (!vec.isCollided(rodTipLoc, h.loc, 0, hookRadius_outer)) {
+          if (!vec.isCollided(players[h.from].tipOfRodLoc, h.loc, 0, hookRadius_outer)) {
             h.waitTillExit.delete(pid);
           }
           //if !waitTillExit
@@ -1225,8 +1224,10 @@ setInterval(() => {
 
 var facingDirCallback = (playerid) => {
   return (newDir) => {
-    if (newDir.x && typeof (newDir.x) === 'number' && newDir.y && typeof (newDir.y) === 'number')
-      players[playerid].tipOfRodDir = vec.normalized({ x: newDir.x, y: newDir.y }, playerRadius + rodDistance);
+    if (newDir.x && typeof (newDir.x) === 'number' && newDir.y && typeof (newDir.y) === 'number') {
+      let extractedNewDir = { x: newDir.x, y: newDir.y };
+      players[playerid].tipOfRodLoc = calculateTipOfRodLoc(players[playerid].loc, extractedNewDir);
+    }
   };
 }
 
