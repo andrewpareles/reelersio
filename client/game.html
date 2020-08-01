@@ -7,24 +7,28 @@
   }
 
   html,
-  body, 
+  body,
   div,
   canvas {
     zoom: 1;
     margin: 0;
     padding: 0;
+    background-color: white;
   }
 </style>
 
 <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
 
-<!-- <div id='overlay'>
-  <label for="username">Username:</label>
-  <input type="text" id="username"><br><br>
-  <button type="submit" value="Submit">
-</div> -->
+<div id='overlay'>
+  <div id='input' style="position: absolute; top:50%; left:50%;">
+    <label for="username">Username:</label>
+    <input type="text" id="username"><br><br>
+    <button type="submit">Play</button>
+  </div>
+</div>
 
 <div id='game'>
+  <!-- hidden='true' -->
   <canvas id='canvas'></canvas>
   <script src="client-bundled.js"></script>
 </div>
