@@ -20,12 +20,14 @@ var hookRadius_inner = null;
 var mapRadius = null;
 var maxMessageLen = null;
 
-var isConnected = false;
 
 // LOCAL VARIABLES:
 // up, down, left, right
 var keysPressedLocal = new Set();
 var mouseX = 0, mouseY = 0;
+
+var isConnected = false;
+var animationFrameId = null;
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -392,7 +394,7 @@ let newFrame = (timestamp) => {
   }
 
 
-  window.requestAnimationFrame(newFrame);
+  animationFrameId = window.requestAnimationFrame(newFrame);
 }
 
 
@@ -587,6 +589,8 @@ socket.on('deathmessage', deathMessage);
 
 const whenDisconnect = () => {
   isConnected = false;
+  window.cancelAnimationFrame(animationFrameId);
+  animationFrameId = null;
   socket.open();
 }
 socket.on('disconnect', whenDisconnect);
