@@ -20,6 +20,7 @@ var hookRadius_inner = null;
 var mapRadius = null;
 var maxMessageLen = null;
 
+var isConnected = false;
 
 // LOCAL VARIABLES:
 // up, down, left, right
@@ -43,9 +44,9 @@ const getWaitForExecutionPair = (callback) => {
 
 var send = {
   // sent when you join the game:
-  join: async (callback) => {
+  join: async (username, callback) => {
     const [new_callback, new_promise] = getWaitForExecutionPair(callback);
-    socket.emit('join', 'user1', new_callback);
+    socket.emit('join', username, new_callback);
     await new_promise;
   },
   goindirection: (direction) => { // tells server that user just pressed a key (direction = "up|down|left|right")
@@ -125,7 +126,7 @@ let updateCanvasSize = () => {
 //1. update camZoom and camLoc
 //2. call updateCamView()
 //3. when drawing, use getPosOnScreen.
-var camZoomDefault = 1.5;
+var camZoomDefault = 2;
 var camZoom = camZoomDefault;
 var camLoc = null; //camera location in world
 var camZoomIsResetting = false;
@@ -537,10 +538,13 @@ const whenConnect = async () => {
   // 1. tell server I'm a new player
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
+    isConnected = true;
     [players, hooks, world, playerRadius, hookRadius_outer,
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
-  await send.join(joinCallback);
+  // await USERNAME 
+  // TODO page with username
+  await send.join('user1', joinCallback);
 
   console.log("playerid", playerid);
   console.log("players", players);
@@ -557,14 +561,33 @@ socket.on('connect', whenConnect);
 
 
 
-const serverImage = (serverPlayers, serverHooks) => {
-  if (!players) console.log("too early");
-  players = serverPlayers;
-  hooks = serverHooks;
+const serverImage = (serverPlayers, serverHooks, playersWhoDied) => {
+  if (isConnected) {
+    players = serverPlayers;
+    hooks = serverHooks;
+
+    for (pid in playersWhoDied) {
+      // TODO: START ANIMATION
+    }
+
+  }
 }
 socket.on('serverimage', serverImage);
 
 
+
+const deathMessage = (...deathInfo) => {
+  const [score, duration, kills, mass] = deathInfo;
+  // TODO DISPLAY INFO
+}
+socket.on('deathmessage', deathMessage);
+
+
+const whenDisconnect = () => {
+  isConnected = false;
+  socket.open();
+}
+socket.on('disconnect', whenDisconnect);
 
 
 const requestFacingDir = (callback) => {

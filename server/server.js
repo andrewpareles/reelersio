@@ -186,7 +186,7 @@ var playersInfo = {
         //metrics
         kills,
         deaths,
-        timeAlive,
+        timeStarted,
 
         // metadata 
         walkspeed,
@@ -652,7 +652,7 @@ var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
   let hookColors = playersInfo[pid_from].hooks.defaultColors;
   let hookVel = playersInfo[pid_from].hooks.attached.size > 0 ?
-    vec.normalized(hookVelDir, hookspeed_hooked)
+    vec.normalized(throwDir, hookspeed_hooked)
     : vec.projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
   let hook = {
     from: pid_from,
@@ -853,15 +853,6 @@ var player_create = (pid, username) => {
 
 var player_delete = (pid) => {
   // delete all hooks that were from player
-  if (!playersInfo[pid]) {
-    console.log("players:", players);
-    console.log("hooks:", hooks);
-
-    console.error('player disconnect error:', pid);
-    console.log('hooks', hooks);
-    return;
-  }
-
   hook_deleteAllOwned(pid);
   // detach & pull in all hooks that are attached to player
   // console.log('attached', getAttached(pid));
@@ -880,6 +871,7 @@ const generateRandomPlayerColor = () => {
 }
 
 const createNewPlayerAndInfo = (username, pOptions = {}) => {
+  let now = Date.now();
   let startLoc = generateRandomLoc();
   let [pCol, hCol, lineCol, bobberCol] = generateRandomPlayerColor();
   return [
@@ -923,6 +915,12 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       },
       chat: {
         timeouts: [],
+      },
+      constants: {
+        score: 0,
+        mass: 10,
+        kills: 0,
+        timeStarted: now,
       }
     }
   ]
@@ -932,12 +930,12 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
 //if you want to understand the game, this is where to do it:
 // fired when client connects
 io.on('connection', (socket) => {
-  console.log("player joining:", socket.id);
-  sockets[socket.id] = socket;
-
   //set what server does on different events
   socket.on('join', (username, callback) => {
+    console.log("player joining:", socket.id, "sockets:", Object.keys(sockets), "players:", Object.keys(players));
+    sockets[socket.id] = socket;
     player_create(socket.id, username);
+
     callback(
       players,
       hooks,
@@ -952,7 +950,12 @@ io.on('connection', (socket) => {
 
 
   socket.on('disconnect', (reason) => {
-    console.log("player disconnecting:", socket.id, reason);
+    console.log("player disconnecting:", socket.id, reason, "sockets:", Object.keys(sockets), "players:", Object.keys(players));
+    if (!playersInfo[socket.id]) {
+      console.error('player disconnect error:', socket.id);
+      return;
+    }
+    delete sockets[socket.id];
     player_delete(socket.id);
   });
 
@@ -1019,6 +1022,7 @@ io.on('connection', (socket) => {
 });
 
 
+var playersWhoDied = {}; //{playerids: holeid}
 // ---------- RUN GAME (socket calls do the updating, this just runs it) ----------
 // Update locations, then update states
 // 1. update hooks with velocity (i.e update hooks not following a player), and confine them to world border 
@@ -1026,7 +1030,6 @@ io.on('connection', (socket) => {
 // 3. update hooks based on confinement to player, distance to player, and aiming.
 // 4. update hooks based on collisions (only for hooks with !h.to)
 // 5. hole collisions
-
 const updateGame = (dt) => {
   //1.
   for (let hid in hooks) {
@@ -1175,9 +1178,7 @@ const updateGame = (dt) => {
     for (let pid in players) {
       if (vec.isContaining(hl.loc, players[pid].loc, hl.radius, playerRadius / 2)) {
         // DISCONNECT
-        player_delete(pid);
-        //CONNECT
-        player_create(pid, 'respawned1');
+        playersWhoDied[pid] = hlid;
       }
     }
   }
@@ -1202,10 +1203,22 @@ setInterval(() => {
 
 setInterval(() => {
   // io.volatile.json.emit('serverimage', players, hooks);
-  for (let playerid in players) {
+  for (let playerid in sockets) {
     //send each player information specific to themselves
-    sockets[playerid].emit('serverimage', players, hooks);
+    sockets[playerid].emit('serverimage', players, hooks, playersWhoDied);
   }
+
+  // TODO let player be a hole for a period of time, and reclaim their life
+  let now;
+  if (Object.keys(playersWhoDied).length > 0) {
+    now = Date.now();
+  }
+  for (let playerid in playersWhoDied) {
+    let pConsts = playersInfo[playerid].constants;
+    sockets[playerid].emit('deathmessage', pConsts.score, now - pConsts.timeStarted, pConsts.kills, pConsts.mass);
+    sockets[playerid].disconnect(true);
+  }
+  playersWhoDied = {};
 }, GAME_SEND_TIME);
 
 
