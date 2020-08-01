@@ -108,6 +108,18 @@ const rotatedByTheta = (a, theta) => {
   return { x: a.x * cos + a.y * -sin, y: a.x * sin + a.y * cos };
 }
 
+// returns qVel projected on motionVec
+// minSpeed is the minimum speed that can be returned (if it would return 0, return motionDir with speed minSpeed. same idea for maxSpeed)
+// multiplier is the multiplier for the projected velocity
+var projectedVelocityInDirection = (qVel, motionDir, minSpeed = -Infinity, maxSpeed = Infinity, multiplier = 1) => {
+  let motionSpeed = multiplier * parallelComponentMagnitude(qVel, motionDir);
+  if (motionSpeed < minSpeed) motionSpeed = minSpeed;
+  else if (motionSpeed > maxSpeed) motionSpeed = maxSpeed;
+  let motionVec = normalized(motionDir, motionSpeed);
+  return motionVec;
+}
+
+
 exports.vec = {
   add,
   weightedSum,
@@ -128,6 +140,7 @@ exports.vec = {
   parallelComponentMagnitude,
   orthogonalComponent,
   rotatedByTheta,
+  projectedVelocityInDirection,
   zero,
 
 }

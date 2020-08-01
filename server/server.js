@@ -83,17 +83,6 @@ const generateRandomLoc = () => {
   // return { x: 10 + Math.random() * 1000, y: 10 + Math.random() * -1000 };
 }
 
-// returns qVel projected on motionVec
-// minSpeed is the minimum speed that can be returned (if it would return 0, return motionDir with speed minSpeed. same idea for maxSpeed)
-// multiplier is the multiplier for the projected velocity
-var projectedVelocityInDirection = (qVel, motionDir, minSpeed = -Infinity, maxSpeed = Infinity, multiplier = 1) => {
-  let motionSpeed = multiplier * vec.parallelComponentMagnitude(qVel, motionDir);
-  if (motionSpeed < minSpeed) motionSpeed = minSpeed;
-  else if (motionSpeed > maxSpeed) motionSpeed = maxSpeed;
-  let motionVec = vec.normalized(motionDir, motionSpeed);
-  return motionVec;
-}
-
 /** ---------- PLAYER COLORS ---------- */
 var generateColorPalette = () => {
   let playerBaseColors = [
@@ -315,12 +304,19 @@ var world = {
 
 
 
-// game assumes these are normalized
-var keyVectors = {
-  'up': { x: 0, y: 1 },
-  'down': { x: 0, y: -1 }, //must = -up
-  'left': { x: -1, y: 0 }, //must = -right
-  'right': { x: 1, y: 0 }
+var leaderboard = {
+
+}
+
+
+
+
+// game assumes these are normalized!!
+const keyVectors = {
+  'up': vec.normalized({ x: 0, y: 1 }),
+  'down': vec.normalized({ x: 0, y: -1 }), //must = -up
+  'left': vec.normalized({ x: -1, y: 0 }), //must = -right
+  'right': vec.normalized({ x: 1, y: 0 })
 }
 
 
@@ -537,11 +533,11 @@ var chat_message_timeout_decay = (pid, dt) => {
 // pid of player being kb'd, hid of hook knocking back player
 var knockbackAdd = (hid, pid) => {
   let kbVel;
-  let kbFromHookVel = projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, knockbackspeed_min, knockbackspeed_max);
+  let kbFromHookVel = vec.projectedVelocityInDirection(hooks[hid].vel, hooks[hid].vel, knockbackspeed_min, knockbackspeed_max);
   //if hook is headed towards player (ie NOT FAR INSIDE PLAYER), incorporate pool ball effect:
   let hookToKbPlayer = vec.sub(players[pid].loc, hooks[hid].loc);
   if (vec.dot(hookToKbPlayer, hooks[hid].vel) > 0) { //ignores case where hookToKbPlayer = {0,0}
-    let kbFromPoolEffect = projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max);
+    let kbFromPoolEffect = vec.projectedVelocityInDirection(hooks[hid].vel, hookToKbPlayer, knockbackspeed_min, knockbackspeed_max);
     kbVel = vec.weightedSum([percentPoolBallEffect, 1 - percentPoolBallEffect], kbFromPoolEffect, kbFromHookVel);
   } else { //just hook vel:
     kbVel = kbFromHookVel;
@@ -653,12 +649,13 @@ var getTipOfRodLoc = (pid) => {
 }
 
 // returns [hook id, hook object]
-var createNewHook = (pid_from, throwDir) => {
+var createNewHook = (pid_from, throwTowards) => {
   let p = players[pid_from];
   let hookColors = playersInfo[pid_from].hooks.defaultColors;
+  let hookVelDir = vec.sub(throwTowards, getTipOfRodLoc(pid_from));
   let hookVel = playersInfo[pid_from].hooks.attached.size > 0 ?
-    vec.normalized(throwDir, hookspeed_hooked)
-    : projectedVelocityInDirection(p.vel, throwDir, hookspeed_min, hookspeed_max);
+    vec.normalized(hookVelDir, hookspeed_hooked)
+    : vec.projectedVelocityInDirection(p.vel, hookVelDir, hookspeed_min, hookspeed_max);
   let hook = {
     from: pid_from,
     to: null,
@@ -712,8 +709,8 @@ var hookDetach = (hid, setWaitTillExit) => {
     playersInfo[h.from].hooks.reel_cooldown = null;
 }
 
-var hookThrow = (pid_from, hookDir) => {
-  let [hid, hook] = createNewHook(pid_from, hookDir);
+var hookThrow = (pid_from, hookLoc) => {
+  let [hid, hook] = createNewHook(pid_from, hookLoc);
   hooks[hid] = hook;
   hook.waitTillExit.add(pid_from);
   getOwned(pid_from).add(hid);
@@ -752,7 +749,7 @@ var hookReel = (pid) => {
         hookStopReelingPlayer(hooks[hid2]);
       }
       let reelDir = vec.sub(getTipOfRodLoc(pid), h.loc);
-      let hookVel = projectedVelocityInDirection(players[pid].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
+      let hookVel = vec.projectedVelocityInDirection(players[pid].vel, reelDir, hookspeedreel_min, hookspeedreel_max);
       hookStartReelingPlayer(pid, hid, hookVel);
       // also reset knockback of player
       knockbackReset(playersInfo[h.to]);
@@ -982,13 +979,13 @@ io.on('connection', (socket) => {
   });
 
 
-  socket.on('leftclick', (hookDir) => {// hookDir is {x, y}
+  socket.on('leftclick', (hookLoc) => {// hookDir is {x, y}
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.throw_cooldown) {
       //throw a new hook
       if (pInfo.hooks.owned.size < maxHooksOut)
-        hookThrow(socket.id, hookDir);
+        hookThrow(socket.id, hookLoc);
     }
   });
 

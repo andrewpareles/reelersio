@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -54,8 +54,8 @@ var send = {
   stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
     socket.emit('stopindirection', direction);
   },
-  leftclick: (hookDir) => {
-    socket.emit('leftclick', hookDir);
+  leftclick: (hookLoc) => {
+    socket.emit('leftclick', hookLoc);
   },
   rightclick: () => {
     socket.emit('rightclick');
@@ -110,14 +110,14 @@ var WIDTH = window.innerWidth;
 var HEIGHT = window.innerHeight;
 canvas.width = WIDTH;
 canvas.height = HEIGHT;
-var midScreen = { x: WIDTH / 2, y: -HEIGHT / 2 }; //in world coords
+var midScreen = { x: WIDTH / 2, y: HEIGHT / 2 }; //in screen coords
 
 let updateCanvasSize = () => {
   WIDTH = window.innerWidth;
   HEIGHT = window.innerHeight;
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
-  midScreen = { x: WIDTH / 2, y: -HEIGHT / 2 };
+  midScreen = { x: WIDTH / 2, y: HEIGHT / 2 };
 }
 
 
@@ -150,8 +150,15 @@ const positiveMod = (n, m) => {
 var getPosOnScreen = (locInWorld) => {
   let camToObj = vec.sub(locInWorld, camLoc);
   let screenPos = vec.normalized(camToObj, vec.magnitude(camToObj) / camZoom);
-  let posWithNegY = vec.add(screenPos, midScreen);
-  return { x: posWithNegY.x, y: -posWithNegY.y };
+  return vec.add(midScreen, { x: screenPos.x, y: -screenPos.y });
+}
+
+
+//parameter asks for midScreen to the object (in screen coords, with flipped y)
+var getPosInWorld = (midscreenToObj) => {
+  midscreenToObj = { x: midscreenToObj.x, y: -midscreenToObj.y };
+  let midToObj_scaled = vec.scalar(midscreenToObj, camZoom);
+  return vec.add(camLoc, midToObj_scaled);
 }
 
 // make sure start is the intersection to start bolding!! start, end, inc are all in corrds of screen
@@ -465,17 +472,21 @@ document.addEventListener('keyup', function (event) {
   }
 });
 
-//dir with respect to player
-var getPlayerToMouse = () => {
-  let mousePos = { x: mouseX - canv_left, y: -(mouseY - canv_top) };
-  return vec.sub(mousePos, midScreen); //points from player to mouse
+//dir with respect to camLoc (midscreen), flipping y so it's in world coords
+var getMidScreenToMouse = () => {
+  let mousePos = { x: mouseX - canv_left, y: mouseY - canv_top };
+  return vec.sub(mousePos, midScreen); //points from midscreen to mouse
+}
+
+var getMousePosInWorld = () => {
+  return getPosInWorld(getMidScreenToMouse());
 }
 document.addEventListener('mousedown', function (event) {
   switch (event.button) {
     //left click:
     case 0:
-      let hookDir = getPlayerToMouse();
-      send.leftclick(hookDir);
+      let hookLoc = getMousePosInWorld();
+      send.leftclick(hookLoc);
       break;
     //right click
     case 2:
@@ -555,8 +566,9 @@ socket.on('serverimage', serverImage);
 
 
 const requestFacingDir = (callback) => {
-  let facingDir = getPlayerToMouse();
-  callback(facingDir);
+  let facingDir = getMidScreenToMouse();
+  let facingDirWorldCoords = { x: facingDir.x, y: -facingDir.y };
+  callback(facingDirWorldCoords);
 }
 socket.on('requestfacingdirection', requestFacingDir);
 
