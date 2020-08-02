@@ -501,7 +501,6 @@ var player_velocity_update = (pInfo, p) => {
 /** ---------- CHAT FUNCTIONS ---------- */
 var chatAddMessage = (pid, msg) => {
   msg = msg.trim();
-  if (!msg) return;
   if (msg.length > chat_maxMessageLen) {
     msg = msg.substring(0, chat_maxMessageLen);
   }
@@ -509,7 +508,6 @@ var chatAddMessage = (pid, msg) => {
     players[pid].messages.shift();
     playersInfo[pid].chat.timeouts.shift();
   }
-
   players[pid].messages.push(msg);
   playersInfo[pid].chat.timeouts.push(chat_message_timeout);
 }
@@ -927,6 +925,42 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
 }
 
 
+//returns false if the player is not connected!!! (NOT TRUE!!)
+const checkPlayerIsConnected = (pid, debugString = '') => {
+  let ret = !sockets[pid];
+  if (ret) {
+    console.error('Player ', pid, ' was not connected, but sent an event: ', debugString);
+  }
+  return ret;
+}
+const validateVec = (v, debugString = '') => {
+  if (v && typeof v.x === 'number' && typeof v.y === 'number') {
+    let extractedV = { x: v.x, y: v.y };
+    return extractedV;
+  } else {
+    console.error('Expected vector ', v, ' was not of the correct data type:', debugString);
+    return false;
+  }
+}
+const validateDir = (d, debugString = '') => {
+  if (d && typeof d === 'string' && keyVectors[d]) {
+    return d;
+  } else {
+    console.error('Expected dir ', d, ' was not of the correct data type:', debugString);
+    return false;
+  }
+}
+const validateStr = (s, debugString = '') => {
+  if (s && typeof s === "string") {
+    return s;
+  } else {
+    console.error('Expected string ', s, ' was not of the correct data type:', debugString);
+    return false;
+  }
+}
+
+
+
 //if you want to understand the game, this is where to do it:
 // fired when client connects
 io.on('connection', (socket) => {
@@ -936,16 +970,20 @@ io.on('connection', (socket) => {
     sockets[socket.id] = socket;
     player_create(socket.id, username);
 
-    callback(
-      players,
-      hooks,
-      world,
-      playerRadius,
-      hookRadius_outer,
-      hookRadius_inner,
-      mapRadius,
-      chat_maxMessageLen,
-    );
+    try {
+      callback(
+        players,
+        hooks,
+        world,
+        playerRadius,
+        hookRadius_outer,
+        hookRadius_inner,
+        mapRadius,
+        chat_maxMessageLen,
+      );
+    } catch (e) {
+      console.error('Failed to run callback ', callback, 'for player ', pid);
+    }
   });
 
 
@@ -953,14 +991,19 @@ io.on('connection', (socket) => {
     console.log("player disconnecting:", socket.id, reason, "sockets:", Object.keys(sockets), "players:", Object.keys(players));
     if (!playersInfo[socket.id]) {
       console.error('player disconnect error:', socket.id);
-      return;
     }
+    if (checkPlayerIsConnected(socket.id)) return;
+
     delete sockets[socket.id];
     player_delete(socket.id);
   });
 
 
   socket.on('goindirection', (dir) => {// dir is up, down, left, or right
+    let debug = 'goindirection';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+    dir = validateDir(dir, debug); if (!dir) return;
+
     let pInfo = playersInfo[socket.id];
     if (!pInfo.walk.keysPressed.has(dir)) {
       pInfo.walk.keysPressed.add(dir);
@@ -971,6 +1014,10 @@ io.on('connection', (socket) => {
 
 
   socket.on('stopindirection', (dir) => {// dir is up, down, left, or right
+    let debug = 'stopindirection';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+    dir = validateDir(dir, debug); if (!dir) return;
+
     let pInfo = playersInfo[socket.id];
     if (pInfo.walk.keysPressed.has(dir)) {
       pInfo.walk.keysPressed.delete(dir);
@@ -980,17 +1027,24 @@ io.on('connection', (socket) => {
   });
 
 
-  socket.on('leftclick', (hookDir) => {// hookDir is {x, y}
+  socket.on('leftclick', (dir) => {// hookDir is {x, y}
+    let debug = 'leftclick';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+    dir = validateVec(dir, debug); if (!dir) return;
+
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.throw_cooldown) {
       //throw a new hook
       if (pInfo.hooks.owned.size < maxHooksOut)
-        hookThrow(socket.id, hookDir);
+        hookThrow(socket.id, dir);
     }
   });
 
   socket.on('rightclick', () => {
+    let debug = 'rightclick';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+
     // console.log('starting to reel')
     let pInfo = playersInfo[socket.id];
     if (pInfo.hooks.owned.size >= 1) {
@@ -1002,24 +1056,46 @@ io.on('connection', (socket) => {
 
 
   socket.on('resethooks', () => {
+    let debug = 'resethooks';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+
     hook_deleteAllOwned(socket.id);
   });
 
   socket.on('startaiming', () => {
+    let debug = 'startaiming';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+
     aimingStart(socket.id);
   });
 
   socket.on('stopaiming', () => {
+    let debug = 'stopaiming';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+
     aimingStop(socket.id);
   });
 
   socket.on('chatmessage', (msg) => {
+    let debug = 'chatmessage';
+    if (checkPlayerIsConnected(socket.id, debug)) return;
+    msg = validateStr(msg, debug); if (!msg) return;
+
     chatAddMessage(socket.id, msg);
   });
 
-
-
 });
+
+var facingDirCallback = (playerid) => {
+  let debug = 'facingdir';
+  return (dir) => {
+    if (checkPlayerIsConnected(playerid, debug)) return;
+    dir = validateVec(dir, debug); if (!dir) return;
+
+    players[playerid].tipOfRodLoc = calculateTipOfRodLoc(players[playerid].loc, dir);
+
+  };
+}
 
 
 var playersWhoDied = {}; //{playerids: holeid}
@@ -1220,16 +1296,6 @@ setInterval(() => {
   playersWhoDied = {};
 }, GAME_SEND_TIME);
 
-
-
-var facingDirCallback = (playerid) => {
-  return (newDir) => {
-    if (newDir.x && typeof (newDir.x) === 'number' && newDir.y && typeof (newDir.y) === 'number') {
-      let extractedNewDir = { x: newDir.x, y: newDir.y };
-      players[playerid].tipOfRodLoc = calculateTipOfRodLoc(players[playerid].loc, extractedNewDir);
-    }
-  };
-}
 
 setInterval(() => {
   for (let playerid in players) {

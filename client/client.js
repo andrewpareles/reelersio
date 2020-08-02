@@ -38,8 +38,9 @@ const getWaitForExecutionPair = (callback) => {
   let r;
   const promise = new Promise((res, rej) => { r = res; });
   let new_fn = (...args) => {
-    callback(...args);
+    let val = callback(...args);
     r();
+    return val;
   }
   return [new_fn, promise];
 };
@@ -52,27 +53,35 @@ var send = {
     await new_promise;
   },
   goindirection: (direction) => { // tells server that user just pressed a key (direction = "up|down|left|right")
+    if (!isConnected) return;
     socket.emit('goindirection', direction);
   },
   stopindirection: (direction) => { // tells server that user just released a key (direction = "up|down|left|right")
+    if (!isConnected) return;
     socket.emit('stopindirection', direction);
   },
   leftclick: (hookDir) => {
+    if (!isConnected) return;
     socket.emit('leftclick', hookDir);
   },
   rightclick: () => {
+    if (!isConnected) return;
     socket.emit('rightclick');
   },
   resethooks: () => {
+    if (!isConnected) return;
     socket.emit('resethooks');
   },
   startaiming: () => {
+    if (!isConnected) return;
     socket.emit('startaiming');
   },
   stopaiming: () => {
+    if (!isConnected) return;
     socket.emit('stopaiming');
   },
   chatmessage: (msg) => {
+    if (!isConnected) return;
     socket.emit('chatmessage', msg);
   },
 }
@@ -103,6 +112,12 @@ var keyActions = {
 
 
 /** ---------- CANVAS / SCREEN CONSTANTS ---------- */
+var game = document.getElementById("game");
+var overlay = document.getElementById("overlay");
+var usernameBox = document.getElementById("usernamebox");
+var playButton = document.getElementById("playbutton");
+
+
 var canvas = document.getElementById("canvas");
 const canv_top = canvas.getBoundingClientRect().top;
 const canv_left = canvas.getBoundingClientRect().left;
@@ -537,6 +552,19 @@ window.addEventListener('resize', () => {
 });
 
 
+
+
+
+var getUsername = async () => {
+  let callback = () => {
+    let username = usernameBox.value;
+    return username;
+  };
+  const [new_callback, new_promise] = getWaitForExecutionPair(callback);
+  playButton.onclick = new_callback;
+  return await new_promise;
+};
+
 const whenConnect = async () => {
   console.log("initializing localPlayer");
   // 1. tell server I'm a new player
@@ -547,8 +575,9 @@ const whenConnect = async () => {
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
   // await USERNAME 
-  // TODO page with username
-  await send.join('user1', joinCallback);
+  let username = await getUsername();
+  console.log(username)
+  await send.join(username, joinCallback);
 
   console.log("playerid", playerid);
   console.log("players", players);
@@ -556,6 +585,9 @@ const whenConnect = async () => {
   console.log("world", world);
   console.log("playerRadius", playerRadius);
   console.log("hookRadius", hookRadius_outer);
+
+  overlay.hidden = true;
+  game.hidden = false;
 
   // once get here, know that everything is defined, so can start rendering  
   // 2. start game
@@ -590,7 +622,12 @@ socket.on('deathmessage', deathMessage);
 const whenDisconnect = () => {
   isConnected = false;
   window.cancelAnimationFrame(animationFrameId);
+  playerid = null;
   animationFrameId = null;
+
+  overlay.hidden = false;
+  game.hidden = true;
+
   socket.open();
 }
 socket.on('disconnect', whenDisconnect);
