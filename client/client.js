@@ -39,8 +39,7 @@ const getWaitForExecutionPair = (callback) => {
   const promise = new Promise((res, rej) => { r = res; });
   let new_fn = (...args) => {
     let val = callback(...args);
-    r();
-    return val;
+    r(val);
   }
   return [new_fn, promise];
 };
@@ -576,7 +575,7 @@ const whenConnect = async () => {
   };
   // await USERNAME 
   let username = await getUsername();
-  console.log(username)
+  //await server call on joinCallback
   await send.join(username, joinCallback);
 
   console.log("playerid", playerid);
@@ -615,6 +614,7 @@ socket.on('serverimage', serverImage);
 const deathMessage = (...deathInfo) => {
   const [score, duration, kills, mass] = deathInfo;
   // TODO DISPLAY INFO
+  console.log('died with:', score, (duration/1000) + 's', kills, mass);
 }
 socket.on('deathmessage', deathMessage);
 
