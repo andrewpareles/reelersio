@@ -14,11 +14,12 @@ const io = require('socket.io')(server);
 const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
-const GAME_SEND_TIME = 16;
-const GAME_REQUEST_TIME = 16;
+const GAME_SEND_TIME = 32;
+const GAME_REQUEST_TIME = 32;
 
 const createDummy = false;
 const numHoles = 100;
+const topNleaderboard = 2;
 
 const mapRadius = 5000;
 const playerRadius = 40; //pix
@@ -158,8 +159,6 @@ const playerHookColorPalette = generateColorPalette();
 //playerid (= socket.id) -> socket
 var sockets = {};
 
-
-
 // PLAYER INFO TO BE BROADCAST (GLOBAL)
 var players = {
   /*
@@ -171,6 +170,7 @@ var players = {
       color: "orange",
       messages:[m0, m1, ...],
       tipOfRodLoc:, location in world of tip of rod
+      facingDir:, direction facing
     }
     */
 };
@@ -179,23 +179,18 @@ var players = {
 var playersInfo = {
   /*
     "initialPlayer (socket.id)": {
-      //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
-      "constants": {
-        score,
-
-        //metrics
+      "metrics": {
         kills,
-        deaths,
         timeStarted,
-
-        // metadata 
+      },
+      "consts":{
         walkspeed,
         boost,
         radius,
         rodDistance,
         hookCutoffDistance,
-
-      },
+      }
+      //NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
       boost: {
         Dir: null, // direction of the boost (null iff no boost)
         Key: null, // key that needs to be held down for current boost to be active
@@ -300,12 +295,73 @@ var world = {
 };
 
 
+class Leaderboard {
+  // playerindex = pid -> index in scores
+  // scores = sorted list of [player, score], by DESCENDING score 
+  constructor() {
+    this.scores = [];
+    this.playerindex = {};
+    this._getInsertLoc = (score) => {
+      let i = 0;
+      let j = this.scores.length;
+      while (i < j) {
+        let index = Math.floor((i + j) / 2);
+        let elt = this.scores[index][1];
+        if (score > elt) j = index;
+        else i = index + 1;
+      }
+      return i; //i === j
+    };
+    this.needsRebroadcast = false; //true when a player in the topN was updated
+  }
+  //updates needsReboradcast to false, and sends original val of needsRebroadcast
+  shouldRebroadcastTopN() {
+    let ret = this.needsRebroadcast;
+    this.needsRebroadcast = false;
+    return ret;
+  }
+  getTopN() {
+    return this.scores.slice(0, topNleaderboard);
+  }
+  //adds inc to player's score
+  addScore(pid, inc) {
+    //remove player from scores
+    let pindex = this.playerindex[pid];
+    let pscore = this.scores.splice(pindex, 1)[0][1];
+    let newscore = pscore + inc;
+    let newindex = this._getInsertLoc(newscore);
+    //update data structures
+    this.scores.splice(newindex, 0, [pid, newscore]);
+    this.playerindex[pid] = newindex;
 
-
-
-var leaderboard = {
-
+    if (pindex <= topNleaderboard || newindex <= topNleaderboard) {
+      this.needsRebroadcast = true;
+    }
+  }
+  addPlayer(pid) {
+    this.scores.push([pid, 0]);
+    let newindex = this.scores.length - 1;
+    this.playerindex[pid] = newindex;
+    if (newindex <= topNleaderboard) {
+      this.needsRebroadcast = true;
+    }
+  }
+  //deletes player from leaderboard
+  deletePlayer(pid) {
+    let pindex = this.playerindex[pid];
+    delete this.playerindex[pid];
+    this.scores.splice(pindex, 1);
+    if (pindex <= topNleaderboard) {
+      this.needsRebroadcast = true;
+    }
+  }
+  getPlayerScore(pid) {
+    return this.scores[this.playerindex[pid]][1];
+  }
 }
+
+//maps score -> set of players
+var leaderboard = new Leaderboard();
 
 
 
@@ -584,6 +640,19 @@ var knockback_timeout_decay = (pInfo, dt) => {
   }
 }
 
+//move to location
+var player_moveTo = (p, loc) => {
+  let dLoc = vec.sub(loc, p.loc);
+  p.loc = loc;
+  p.tipOfRodLoc = vec.add(p.tipOfRodLoc, dLoc);
+}
+//move in direction of p.vel
+var player_move = (p, dt) => {
+  let dLoc = vec.scalar(p.vel, dt);
+  p.loc = vec.add(p.loc, dLoc);
+  p.tipOfRodLoc = vec.add(p.tipOfRodLoc, dLoc);
+
+}
 /** ---------- AIMING FUNCTIONS ---------- */
 var aimingStart = (pid) => {
   playersInfo[pid].hooks.isAiming = true;
@@ -872,6 +941,7 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
   let now = Date.now();
   let startLoc = generateRandomLoc();
   let [pCol, hCol, lineCol, bobberCol] = generateRandomPlayerColor();
+  let defaultFacingDir = { x: 1, y: 0 };
   return [
     {// PLAYER:
       loc: startLoc,
@@ -879,7 +949,8 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       username: username,
       color: pCol,
       messages: [],
-      tipOfRodLoc: calculateTipOfRodLoc(startLoc, { x: 1, y: 0 }),
+      facingDir: defaultFacingDir,
+      tipOfRodLoc: calculateTipOfRodLoc(startLoc, defaultFacingDir),
       ...pOptions,
     },
     // PLAYER INFO:
@@ -914,10 +985,9 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       chat: {
         timeouts: [],
       },
-      constants: {
-        score: 0,
-        mass: 10,
+      metrics: {
         kills: 0,
+        assists: 0,
         timeStarted: now,
       }
     }
@@ -951,7 +1021,7 @@ const validateDir = (d, debugString = '') => {
   }
 }
 const validateStr = (s, debugString = '') => {
-  if (s && typeof s === "string") {
+  if (typeof s === "string") {
     return s;
   } else {
     console.error('Expected string ', s, ' was not of the correct data type:', debugString);
@@ -967,14 +1037,18 @@ io.on('connection', (socket) => {
   //set what server does on different events
   socket.on('join', (username, callback) => {
     console.log("player joining:", socket.id, "sockets:", Object.keys(sockets), "players:", Object.keys(players));
+    let debug = 'join';
+    username = validateStr(username, debug); if (!username) username = "";
     sockets[socket.id] = socket;
     player_create(socket.id, username);
-
+    leaderboard.addPlayer(socket.id);
+    leaderboard.addScore(socket.id, username);
     try {
       callback(
         players,
         hooks,
         world,
+        leaderboard.getTopN(),
         playerRadius,
         hookRadius_outer,
         hookRadius_inner,
@@ -996,6 +1070,7 @@ io.on('connection', (socket) => {
 
     delete sockets[socket.id];
     player_delete(socket.id);
+    leaderboard.deletePlayer(socket.id);
   });
 
 
@@ -1059,6 +1134,7 @@ io.on('connection', (socket) => {
     let debug = 'resethooks';
     if (checkPlayerIsConnected(socket.id, debug)) return;
 
+    // hook_resetAllOwned(socket.id);
     hook_deleteAllOwned(socket.id);
   });
 
@@ -1093,7 +1169,7 @@ var facingDirCallback = (playerid) => {
     dir = validateVec(dir, debug); if (!dir) return;
 
     players[playerid].tipOfRodLoc = calculateTipOfRodLoc(players[playerid].loc, dir);
-
+    players[playerid].facingDir = vec.normalized(dir);
   };
 }
 
@@ -1136,7 +1212,7 @@ const updateGame = (dt) => {
     if (pInfo.knockback.dir) knockback_timeout_decay(pInfo, dt);
     player_velocity_update(pInfo, p);
     // update player location (even if hooked, lets player walk within hook bubble)
-    p.loc = vec.add(p.loc, vec.scalar(p.vel, dt));
+    player_move(p, dt);
 
     // update players confined to hook radius
     if (pInfo.hooks.followHook) {
@@ -1144,12 +1220,12 @@ const updateGame = (dt) => {
       if (!vec.isContaining(p.loc, h.loc, playerRadius, 0)) {
         let htop = vec.sub(p.loc, h.loc);
         boostReset(pInfo);
-        p.loc = vec.add(h.loc, vec.normalized(htop, playerRadius));
+        player_moveTo(p, vec.add(h.loc, vec.normalized(htop, playerRadius)));
       }
     }
     // confine player to world border
     if (!vec.isContaining(vec.zero, p.loc, mapRadius, playerRadius)) {
-      p.loc = vec.normalized(p.loc, mapRadius - playerRadius);
+      player_moveTo(p, vec.normalized(p.loc, mapRadius - playerRadius));
       boostReset(pInfo);
       if (pInfo.hooks.followHook) {
         //if the player is following a hook, need to stop that reel if it's drilling the player into the wall
@@ -1252,8 +1328,10 @@ const updateGame = (dt) => {
     let hl = world.holes[hlid];
     for (let pid in players) {
       if (vec.isContaining(hl.loc, players[pid].loc, hl.radius, playerRadius / 2)) {
-        // DISCONNECT
-        playersWhoDied[pid] = hlid;
+        //add player to playersWhoDied
+        if (!playersWhoDied[pid]) {
+          playersWhoDied[pid] = hlid;
+        }
       }
     }
   }
@@ -1277,28 +1355,31 @@ setInterval(() => {
 
 
 setInterval(() => {
-  // io.volatile.json.emit('serverimage', players, hooks);
+  //send server image to all
   for (let playerid in sockets) {
-    //send each player information specific to themselves
-    sockets[playerid].emit('serverimage', players, hooks, playersWhoDied);
+    sockets[playerid].volatile.json.emit('serverimage', players, hooks, playersWhoDied);
   }
 
+  //if need to send leaderboard, then do
+  if (leaderboard.shouldRebroadcastTopN())
+    io.json.emit('updateleaders', leaderboard.getTopN());
+
+
   // TODO let player be a hole for a period of time, and reclaim their life
-  let now;
   if (Object.keys(playersWhoDied).length > 0) {
-    now = Date.now();
+    let now = Date.now();
+    for (let playerid in playersWhoDied) {
+      let pMetrics = playersInfo[playerid].metrics;
+      sockets[playerid].json.emit('deathmessage', leaderboard.getPlayerScore(playerid), now - pMetrics.timeStarted, pMetrics.kills, pMetrics.assists);
+      sockets[playerid].disconnect(true);
+    }
+    playersWhoDied = {};
   }
-  for (let playerid in playersWhoDied) {
-    let pConsts = playersInfo[playerid].constants;
-    sockets[playerid].emit('deathmessage', pConsts.score, now - pConsts.timeStarted, pConsts.kills, pConsts.mass);
-    sockets[playerid].disconnect(true);
-  }
-  playersWhoDied = {};
 }, GAME_SEND_TIME);
 
 
 setInterval(() => {
   for (let playerid in players) {
-    sockets[playerid].emit('requestfacingdirection', facingDirCallback(playerid));
+    sockets[playerid].volatile.json.emit('requestfacingdirection', facingDirCallback(playerid));
   }
 }, GAME_REQUEST_TIME);

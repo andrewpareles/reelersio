@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+const ADDRESS = 'http://192.168.1.204:3001';
+// const ADDRESS = 'https://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -13,6 +13,7 @@ var players = null;
 var hooks = null;
 var playerid = null;
 var world = null;
+var leaders = null;
 
 var playerRadius = null;
 var hookRadius_outer = null;
@@ -115,6 +116,7 @@ var game = document.getElementById("game");
 var overlay = document.getElementById("overlay");
 var usernameBox = document.getElementById("usernamebox");
 var playButton = document.getElementById("playbutton");
+var prevStatsBox = document.getElementById("prevstatsbox");
 
 
 var canvas = document.getElementById("canvas");
@@ -268,9 +270,8 @@ var playerCamera = {
     // draw rod
     if (players[pid].tipOfRodLoc) {
       let tipOfRodScreen = getPosOnScreen(players[pid].tipOfRodLoc);
-      let facingDir = vec.sub(tipOfRodScreen, midScreen);
-      let armDir = vec.normalized(vec.rotatedByTheta(facingDir, Math.PI / 2), playerRadius);
-      armDir = { x: armDir.x, y: -armDir.y };
+      //all in world coords until armLocScreen
+      let armDir = vec.normalized(vec.rotatedByTheta(players[pid].facingDir, -Math.PI / 2), playerRadius);
       let armLocScreen = getPosOnScreen(vec.add(players[pid].loc, armDir));
       c.beginPath();
       c.strokeStyle = rodColor;
@@ -408,7 +409,7 @@ let newFrame = (timestamp) => {
   }
 
 
-  animationFrameId = window.requestAnimationFrame(newFrame);
+  window.requestAnimationFrame(newFrame);
 }
 
 
@@ -565,17 +566,17 @@ var getUsername = async () => {
 };
 
 const whenConnect = async () => {
-  console.log("initializing localPlayer");
-  // 1. tell server I'm a new player
+  console.log("connected! Waiting for username...");
+  // 1. await USERNAME 
+  let username = await getUsername();
+
+  // 2. tell server I'm a new player
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
     isConnected = true;
-    [players, hooks, world, playerRadius, hookRadius_outer,
+    [players, hooks, world, leaders, playerRadius, hookRadius_outer,
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
-  // await USERNAME 
-  let username = await getUsername();
-  //await server call on joinCallback
   await send.join(username, joinCallback);
 
   console.log("playerid", playerid);
@@ -590,13 +591,16 @@ const whenConnect = async () => {
 
   // once get here, know that everything is defined, so can start rendering  
   // 2. start game
-  window.requestAnimationFrame(newFrame);
+  animationFrameId = window.requestAnimationFrame(newFrame);
 }
 socket.on('connect', whenConnect);
 
 
-
+let prevtime2 = Date.now();
 const serverImage = (serverPlayers, serverHooks, playersWhoDied) => {
+  let dt = Date.now() - prevtime2;
+  prevtime2 = Date.now();
+  if (dt > 34) console.log('server lag', dt);
   if (isConnected) {
     players = serverPlayers;
     hooks = serverHooks;
@@ -611,12 +615,12 @@ socket.on('serverimage', serverImage);
 
 
 
-const deathMessage = (...deathInfo) => {
-  const [score, duration, kills, mass] = deathInfo;
+const whenDie = (...deathInfo) => {
+  const [score, duration, kills, assists] = deathInfo;
   // TODO DISPLAY INFO
-  console.log('died with:', score, (duration/1000) + 's', kills, mass);
+  prevStatsBox.innerHTML = 'Previous score: ' + score + ', with ' + kills + ' kills, ' + assists + ' assists, and a lifetime of ' + (duration / 1000) + 's.';
 }
-socket.on('deathmessage', deathMessage);
+socket.on('deathmessage', whenDie);
 
 
 const whenDisconnect = () => {
@@ -639,6 +643,13 @@ const requestFacingDir = (callback) => {
   callback(facingDirWorldCoords);
 }
 socket.on('requestfacingdirection', requestFacingDir);
+
+
+const updateLeaders = (serverLeaders) => {
+  console.log('newleaders', serverLeaders);
+  leaders = serverLeaders;
+}
+socket.on('updateleaders', updateLeaders);
 
 
 
