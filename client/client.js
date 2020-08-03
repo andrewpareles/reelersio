@@ -278,7 +278,6 @@ var playerCamera = {
       c.moveTo(armLocScreen.x, armLocScreen.y);
       c.lineTo(tipOfRodScreen.x, tipOfRodScreen.y);
       c.stroke();
-
     }
 
     //draw chat messages:
@@ -495,21 +494,22 @@ var getMouseOnScreen = () => {
   return { x: mouseX - canv_left, y: mouseY - canv_top };
 }
 //dir with respect to camLoc (midscreen), in screen coords
-var getMidScreenToMouse = () => {
+var getMidScreenToMouse = (inWorldCoords) => {
   let mousePos = getMouseOnScreen();
-  return vec.sub(mousePos, midScreen); //points from midscreen to mouse
+  let ret = vec.sub(mousePos, midScreen); //points from midscreen to mouse
+  if (inWorldCoords) ret = { x: ret.x, y: -ret.y };
+  return ret;
 }
 
 var getMousePosInWorld = () => {
-  return getPosInWorld(getMidScreenToMouse());
+  return getPosInWorld(getMidScreenToMouse(false));
 }
 document.addEventListener('mousedown', function (event) {
   switch (event.button) {
     //left click:
     case 0:
-      let hookDir = getMidScreenToMouse();
-      let hookDirWorldCoords = { x: hookDir.x, y: -hookDir.y };
-      send.leftclick(hookDirWorldCoords);
+      let hookDir = getMidScreenToMouse(true);
+      send.leftclick(hookDir);
       break;
     //right click
     case 2:
@@ -575,7 +575,7 @@ const whenConnect = async () => {
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
     isConnected = true;
-    [players, hooks, world, leaders, playerRadius, hookRadius_outer,
+    [players, hooks, world, leaders, playerRadius, rodDistance, hookRadius_outer,
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
   await send.join(username, joinCallback);
@@ -639,9 +639,8 @@ socket.on('disconnect', whenDisconnect);
 
 
 const requestFacingDir = (callback) => {
-  let facingDir = getMidScreenToMouse();
-  let facingDirWorldCoords = { x: facingDir.x, y: -facingDir.y };
-  callback(facingDirWorldCoords);
+  let facingDir = getMidScreenToMouse(true);
+  callback(facingDir);
 }
 socket.on('requestfacingdirection', requestFacingDir);
 

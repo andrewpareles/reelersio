@@ -1374,7 +1374,6 @@ setInterval(() => {
   if (leaderboard.shouldRebroadcastTopN())
     io.json.emit('updateleaders', leaderboard.getTopN());
 
-
   // TODO let player be a hole for a period of time, and reclaim their life
   if (Object.keys(playersWhoDied).length > 0) {
     let now = Date.now();
@@ -1390,7 +1389,7 @@ setInterval(() => {
 
 
 setInterval(() => {
-  for (let playerid in players) {
+  for (let playerid in sockets) {
     // sockets[playerid].volatile.json.emit('requestfacingdirection', facingDirCallback(playerid));
   }
 }, GAME_REQUEST_TIME);
