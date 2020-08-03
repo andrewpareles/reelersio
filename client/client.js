@@ -575,7 +575,7 @@ const whenConnect = async () => {
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
     isConnected = true;
-    [players, hooks, world, leaders, playerRadius, rodDistance, hookRadius_outer,
+    [players, hooks, world, leaders, playerRadius, hookRadius_outer,
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
   await send.join(username, joinCallback);
