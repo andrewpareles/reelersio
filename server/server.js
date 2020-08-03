@@ -320,8 +320,12 @@ class Leaderboard {
     this.needsRebroadcast = false;
     return ret;
   }
+  //extracts username from top players
   getTopN() {
-    return this.scores.slice(0, topNleaderboard);
+    let leaders = [];
+    let thisleaders = this.scores.slice(0, topNleaderboard);
+    thisleaders.forEach(([pid, score]) => { leaders.push([players[pid].username, score]) });
+    return leaders;
   }
   //adds inc to player's score
   addScore(pid, inc) {
@@ -714,6 +718,11 @@ var calculateTipOfRodLoc = (pLoc, rodDir) => {
   return vec.add(pLoc, vec.normalized(rodDir, playerRadius + rodDistance));
 }
 
+var updateFacingDirInfo = (p, facingDir) => {
+  p.facingDir = vec.normalized(facingDir);
+  p.tipOfRodLoc = calculateTipOfRodLoc(p.loc, facingDir);
+}
+
 // returns [hook id, hook object]
 var createNewHook = (pid_from, throwDir) => {
   let p = players[pid_from];
@@ -1042,7 +1051,6 @@ io.on('connection', (socket) => {
     sockets[socket.id] = socket;
     player_create(socket.id, username);
     leaderboard.addPlayer(socket.id);
-    leaderboard.addScore(socket.id, username);
     try {
       callback(
         players,
@@ -1056,7 +1064,8 @@ io.on('connection', (socket) => {
         chat_maxMessageLen,
       );
     } catch (e) {
-      console.error('Failed to run callback ', callback, 'for player ', pid);
+      console.error('Failed to run callback ', callback, 'for player ', socket.id);
+      console.error('Error:', e);
     }
   });
 
@@ -1107,6 +1116,8 @@ io.on('connection', (socket) => {
     if (checkPlayerIsConnected(socket.id, debug)) return;
     dir = validateVec(dir, debug); if (!dir) return;
 
+    //received facing info, so update facing info
+    updateFacingDirInfo(players[socket.id], dir);
     // console.log('throwing hook');
     let pInfo = playersInfo[socket.id];
     if (!pInfo.hooks.throw_cooldown) {
@@ -1168,8 +1179,7 @@ var facingDirCallback = (playerid) => {
     if (checkPlayerIsConnected(playerid, debug)) return;
     dir = validateVec(dir, debug); if (!dir) return;
 
-    players[playerid].tipOfRodLoc = calculateTipOfRodLoc(players[playerid].loc, dir);
-    players[playerid].facingDir = vec.normalized(dir);
+    updateFacingDirInfo(players[playerid], dir);
   };
 }
 
@@ -1371,6 +1381,7 @@ setInterval(() => {
     for (let playerid in playersWhoDied) {
       let pMetrics = playersInfo[playerid].metrics;
       sockets[playerid].json.emit('deathmessage', leaderboard.getPlayerScore(playerid), now - pMetrics.timeStarted, pMetrics.kills, pMetrics.assists);
+      //TODO don't immediately disconnect, but make a timer for redemption
       sockets[playerid].disconnect(true);
     }
     playersWhoDied = {};
@@ -1380,6 +1391,6 @@ setInterval(() => {
 
 setInterval(() => {
   for (let playerid in players) {
-    sockets[playerid].volatile.json.emit('requestfacingdirection', facingDirCallback(playerid));
+    // sockets[playerid].volatile.json.emit('requestfacingdirection', facingDirCallback(playerid));
   }
 }, GAME_REQUEST_TIME);

@@ -266,7 +266,6 @@ var playerCamera = {
     c.arc(loc.x, loc.y, playerRadius / camZoom - c.lineWidth / 2, 0, 2 * Math.PI);
     c.stroke();
 
-
     // draw rod
     if (players[pid].tipOfRodLoc) {
       let tipOfRodScreen = getPosOnScreen(players[pid].tipOfRodLoc);
@@ -408,8 +407,7 @@ let newFrame = (timestamp) => {
     playerCamera.drawHook(hid, hooks[hid].from);
   }
 
-
-  window.requestAnimationFrame(newFrame);
+  animationFrameId = window.requestAnimationFrame(newFrame);
 }
 
 
@@ -493,9 +491,12 @@ document.addEventListener('keyup', function (event) {
   }
 });
 
+var getMouseOnScreen = () => {
+  return { x: mouseX - canv_left, y: mouseY - canv_top };
+}
 //dir with respect to camLoc (midscreen), in screen coords
 var getMidScreenToMouse = () => {
-  let mousePos = { x: mouseX - canv_left, y: mouseY - canv_top };
+  let mousePos = getMouseOnScreen();
   return vec.sub(mousePos, midScreen); //points from midscreen to mouse
 }
 
@@ -600,7 +601,7 @@ let prevtime2 = Date.now();
 const serverImage = (serverPlayers, serverHooks, playersWhoDied) => {
   let dt = Date.now() - prevtime2;
   prevtime2 = Date.now();
-  if (dt > 34) console.log('server lag', dt);
+  if (dt > 40) console.log('server lag', dt);
   if (isConnected) {
     players = serverPlayers;
     hooks = serverHooks;
@@ -646,7 +647,6 @@ socket.on('requestfacingdirection', requestFacingDir);
 
 
 const updateLeaders = (serverLeaders) => {
-  console.log('newleaders', serverLeaders);
   leaders = serverLeaders;
 }
 socket.on('updateleaders', updateLeaders);
