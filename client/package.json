@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "compile": "browserify client.js -o ../server/public/client-bundled.js && cp game.html ../server/public/index.html && cp favicon.ico ../server/public/favicon.ico"
+    "compile": "browserify client.js -o ../server/public/client-bundled.js && cp game.html ../server/public/index.html && cp favicon.ico ../server/public/favicon.ico && cp -r anim_canvas/ ../server/public/anim_canvas"
   },
   "author": "",
   "license": "ISC",

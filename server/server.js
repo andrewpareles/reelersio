@@ -1193,6 +1193,7 @@ var playersWhoDied = {}; //{playerids: holeid}
 // 4. update hooks based on collisions (only for hooks with !h.to)
 // 5. hole collisions
 const updateGame = (dt) => {
+  if (dt > 10) console.log('lag', dt);
   //1.
   for (let hid in hooks) {
     let h = hooks[hid];
