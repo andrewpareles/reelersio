@@ -15,7 +15,7 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 16;
-const GAME_REQUEST_TIME = 32;
+const GAME_REQUEST_TIME = 100;
 
 const createDummy = false;
 const numHoles = 100;
