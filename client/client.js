@@ -280,8 +280,22 @@ var playerCamera = {
       c.stroke();
     }
 
-    //draw chat messages:
     let n = 1;
+    let msg = players[pid].username;
+    //draw username
+    c.font = (20 / camZoom) + "px Verdana";
+    c.textAlign = "center";
+    c.textBaseline = "top";
+    //inside
+    c.fillStyle = color;
+    c.fillText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+    //outline
+    c.strokeStyle = 'black';
+    c.lineWidth = .3 / camZoom;
+    c.strokeText(msg, loc.x, loc.y + (playerRadius + 5) * n / camZoom);
+    n++;
+
+    //draw chat messages:
     if (pid === socket.id && isChatting) {
       let msg = chatMsg || "|";
       c.font = (20 / camZoom) + "px Verdana";
