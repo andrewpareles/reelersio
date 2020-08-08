@@ -10,10 +10,10 @@ const server = express()
     console.log(`listening on *:${PORT}`);
   });
 
-const io = require('socket.io')(server);
+const io = require('socket.io')(server, { pingInterval: 5000, pingTimeout: 25000 });
 const { vec } = require('../common/vector.js');
 
-const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
+const GAME_UPDATE_TIME = 8; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 16;
 const GAME_REQUEST_TIME = 16 * 2;
 
@@ -357,6 +357,10 @@ class Leaderboard {
     let pindex = this.playerindex[pid];
     delete this.playerindex[pid];
     this.scores.splice(pindex, 1);
+    //decrease index of all indices greater than pindex
+    for (let [p, _] of this.scores.slice(pindex)) {
+      this.playerindex[p]--;
+    }
     if (pindex <= topNleaderboard) {
       this.needsRebroadcast = true;
     }
@@ -1195,7 +1199,7 @@ var playersWhoDied = {}; //{playerids: holeid}
 // 4. update hooks based on collisions (only for hooks with !h.to)
 // 5. hole collisions
 const updateGame = (dt) => {
-  if (dt > 10) console.log('lag', dt);
+  if (dt > GAME_UPDATE_TIME + 5) console.log('server fps lag', dt);
   //1.
   for (let hid in hooks) {
     let h = hooks[hid];
