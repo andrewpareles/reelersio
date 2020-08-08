@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'http://192.168.1.204:3001';
-const ADDRESS = 'https://trussbucket.herokuapp.com/';
+// const ADDRESS = 'ws://192.168.1.204:3001';
+const ADDRESS = 'wss://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
@@ -616,7 +616,7 @@ let prevtime2 = Date.now();
 const serverImage = (serverPlayers, serverHooks, playersWhoDied) => {
   let dt = Date.now() - prevtime2;
   prevtime2 = Date.now();
-  if (dt > 40) console.log('server lag', dt);
+  if (dt > 40) console.log('connection lag', dt);
   if (isConnected) {
     players = serverPlayers;
     hooks = serverHooks;

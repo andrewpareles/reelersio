@@ -15,7 +15,7 @@ const { vec } = require('../common/vector.js');
 
 const GAME_UPDATE_TIME = 2; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 16;
-const GAME_REQUEST_TIME = 50;
+const GAME_REQUEST_TIME = 16 * 2;
 
 const createDummy = false;
 const numHoles = 100;
@@ -184,6 +184,8 @@ var playersInfo = {
         timeStarted,
       },
       "consts":{
+        GAME_SEND_TIME,
+
         walkspeed,
         boost,
         radius,
@@ -779,8 +781,6 @@ var hookDetach = (hid, setWaitTillExit) => {
 
     h.to = null;
   }
-  if (getOwned(h.from).size === 0)
-    playersInfo[h.from].hooks.reel_cooldown = null;
 }
 
 var hookThrow = (pid_from, hookDir) => {
@@ -813,11 +813,12 @@ var hookAttach = (hid, pid_to) => {
 
 
 //reels all hooks owned by pid
-var hookReel = (pid) => {
+var hookReel = (pid, reelAttached) => {
   // console.log('reeling');
   for (let hid of getOwned(pid)) {
     let h = hooks[hid];
     if (h.to) {
+      if (!reelAttached) continue;
       //for all hooks attached to player, start following the player
       for (let hid2 of getAttached(h.to)) {
         hookStopReelingPlayer(hooks[hid2]);
@@ -832,7 +833,6 @@ var hookReel = (pid) => {
       hookResetInit(hid, true);
     }
   }
-  playersInfo[pid].hooks.reel_cooldown = reel_cooldown;
   // console.log('hooks', hooks);
 }
 
@@ -1135,8 +1135,10 @@ io.on('connection', (socket) => {
     let pInfo = playersInfo[socket.id];
     if (pInfo.hooks.owned.size >= 1) {
       // console.log('reeling');
-      if (!pInfo.hooks.reel_cooldown)
-        hookReel(socket.id);
+      let shouldReelAttached = !pInfo.hooks.reel_cooldown;
+      hookReel(socket.id, shouldReelAttached);
+      if (shouldReelAttached)
+        pInfo.hooks.reel_cooldown = reel_cooldown;
     }
   });
 
