@@ -632,9 +632,12 @@ socket.on('serverimage', serverImage);
 
 
 const whenDie = (...deathInfo) => {
-  const [score, duration, kills, assists] = deathInfo;
-  // TODO DISPLAY INFO
-  prevStatsBox.innerHTML = 'Previous score: ' + score + ', with ' + kills + ' kills, ' + assists + ' assists, and a lifetime of ' + (duration / 1000) + 's.';
+  const [score, duration, kills, hlid, killer] = deathInfo;
+  console.log('killer', killer)
+
+  // TODO SPECTATE & PLAY HOLE DEATH ANIMATION
+  prevStatsBox.innerHTML = 'Previous score: ' + score + ', with ' + kills + ' kills and a lifetime of ' + (duration / 1000) + 's.';
+  if (killer) prevStatsBox.innerHTML += ' Killed by ' + (players[killer].username || 'Anonymous Reeler') + '.';
 }
 socket.on('deathmessage', whenDie);
 

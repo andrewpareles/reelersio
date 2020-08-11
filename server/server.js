@@ -182,6 +182,7 @@ var playersInfo = {
       "metrics": {
         kills,
         timeStarted,
+        //NOTE: SCORE IS LOCATED IN LEADERBOARD
       },
       "consts":{
         GAME_SEND_TIME,
@@ -218,6 +219,10 @@ var playersInfo = {
       
       chat: {
         timeouts: [t0, t1, ...], //list of time before message disappears, corresponding to each msg
+      },
+
+      pvp: {
+        taggedBy: , //player who most recently hit this player
       }
     },
   */
@@ -330,7 +335,7 @@ class Leaderboard {
     return leaders;
   }
   //adds inc to player's score
-  addScore(pid, inc) {
+  addToPlayerScore(pid, inc) {
     //remove player from scores
     let pindex = this.playerindex[pid];
     let pscore = this.scores.splice(pindex, 1)[0][1];
@@ -339,12 +344,15 @@ class Leaderboard {
     //update data structures
     this.scores.splice(newindex, 0, [pid, newscore]);
     this.playerindex[pid] = newindex;
+    for (let [p, _] of this.scores.slice(newindex + 1)) {
+      this.playerindex[p]++;
+    }
 
     if (pindex <= topNleaderboard || newindex <= topNleaderboard) {
       this.needsRebroadcast = true;
     }
   }
-  addPlayer(pid) {
+  initPlayer(pid) {
     this.scores.push([pid, 0]);
     let newindex = this.scores.length - 1;
     this.playerindex[pid] = newindex;
@@ -673,6 +681,21 @@ var aimingStop = (pid) => {
   pInfo.hooks.isAiming = false;
 }
 
+/** ---------- PVP TAGGING ----------  */
+
+// pvp tag from aggressor to tagged
+var updatePvpTag = (pid_tagged, pid_aggressor) => {
+  playersInfo[pid_tagged].pvp.taggedBy = pid_aggressor;
+}
+
+//when killer kills dead, update score
+var updateScoreOnKill = (pid_killer, pid_dead) => {
+  playersInfo[pid_killer].metrics.kills++;
+  let scoreInc = Math.round(leaderboard.getPlayerScore(pid_dead) + 1);
+  leaderboard.addToPlayerScore(pid_killer, scoreInc);
+}
+
+
 /** ---------- HOOK FUNCTIONS ----------  */
 var getOwned = (pid_from) => {
   return playersInfo[pid_from].hooks.owned;
@@ -799,30 +822,33 @@ var hookThrow = (pid_from, hookDir) => {
 //attach hook hid to player pid_to
 //update hooks[hid]'s to and player's attached
 var hookAttach = (hid, pid_to) => {
+  let h = hooks[hid];
   //knockback
   knockbackAdd(hid, pid_to);
   //attachment
-  hooks[hid].to = pid_to;
-  hooks[hid].vel = null;
-  hooks[hid].isResetting = false;
+  h.to = pid_to;
+  h.vel = null;
+  h.isResetting = false;
   getAttached(pid_to).add(hid);
-  getHookedBy(pid_to).add(hooks[hid].from);
-  getAttachedTo(hooks[hid].from).add(pid_to);
+  getHookedBy(pid_to).add(h.from);
+  getAttachedTo(h.from).add(pid_to);
   // reset pid_to boost
   boostReset(playersInfo[pid_to]);
   //reset reel cooldown for hook owner
-  playersInfo[hooks[hid].from].hooks.reel_cooldown = null;
-  hooks[hid].waitTillExit.clear();
+  playersInfo[h.from].hooks.reel_cooldown = null;
+  h.waitTillExit.clear();
+  //pvp tag
+  updatePvpTag(h.to, h.from);
 }
 
 
 //reels all hooks owned by pid
-var hookReel = (pid, reelAttached) => {
+var hookReel = (pid, shouldReelPlayers) => {
   // console.log('reeling');
   for (let hid of getOwned(pid)) {
     let h = hooks[hid];
     if (h.to) {
-      if (!reelAttached) continue;
+      if (!shouldReelPlayers) continue;
       //for all hooks attached to player, start following the player
       for (let hid2 of getAttached(h.to)) {
         hookStopReelingPlayer(hooks[hid2]);
@@ -832,6 +858,8 @@ var hookReel = (pid, reelAttached) => {
       hookStartReelingPlayer(pid, hid, hookVel);
       // also reset knockback of player
       knockbackReset(playersInfo[h.to]);
+      // set pvp tag
+      updatePvpTag(h.to, h.from);
     }
     else {
       hookResetInit(hid, true);
@@ -968,6 +996,10 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
     },
     // PLAYER INFO:
     {//NOTE: here by "key" I MEAN DIRECTION KEY (up/down/left/right)
+      metrics: {
+        kills: 0,
+        timeStarted: now,
+      },
       boost: {
         Dir: null, // direction of the boost (null iff no boost)
         Key: null, // key that needs to be held down for current boost to be active
@@ -998,11 +1030,9 @@ const createNewPlayerAndInfo = (username, pOptions = {}) => {
       chat: {
         timeouts: [],
       },
-      metrics: {
-        kills: 0,
-        assists: 0,
-        timeStarted: now,
-      }
+      pvp: {
+        taggedBy: null,
+      },
     }
   ]
 }
@@ -1054,7 +1084,7 @@ io.on('connection', (socket) => {
     username = validateStr(username, debug); if (!username) username = "";
     sockets[socket.id] = socket;
     player_create(socket.id, username);
-    leaderboard.addPlayer(socket.id);
+    leaderboard.initPlayer(socket.id);
     try {
       callback(
         players,
@@ -1197,7 +1227,7 @@ var playersWhoDied = {}; //{playerids: holeid}
 // 2. update all player locations, and confine them to the hooks they're following (and confine to world border too)
 // 3. update hooks based on confinement to player, distance to player, and aiming.
 // 4. update hooks based on collisions (only for hooks with !h.to)
-// 5. hole collisions
+// 5. hole collisions (DEATHS)
 const updateGame = (dt) => {
   if (dt > GAME_UPDATE_TIME + 5) console.log('server fps lag', dt);
   //1.
@@ -1340,14 +1370,32 @@ const updateGame = (dt) => {
   } //end for (players)
 
 
-  //5.
+  //5. DEATHS
   for (let hlid in world.holes) {
     let hl = world.holes[hlid];
     for (let pid in players) {
       if (vec.isContaining(hl.loc, players[pid].loc, hl.radius, playerRadius / 2)) {
-        //add player to playersWhoDied
+        //add player to playersWhoDied (don't want to do this every dt, so need if statement, player isn't deleted instantly)
         if (!playersWhoDied[pid]) {
-          playersWhoDied[pid] = hlid;
+          //decide who killer is, if any
+          let killer = playersInfo[pid].pvp.taggedBy;
+          if (false && killer) {
+            //TODO: if killer is completely dead, send a beyondGraveKill message
+            if (!playersInfo[killer]) {
+              //TODO
+            }
+            // otherwise, TODO: HANDLE REDEMPTION from tagging, i.e. knockback or an idiot walking into a hole (not just swallowing as a hole)
+            else if (false) {
+              //TODO
+            }
+          }
+          //update killer's score
+          if (killer) {
+            updateScoreOnKill(killer, pid);
+          }
+          console.log('A', killer);
+
+          playersWhoDied[pid] = [hlid, killer];
         }
       }
     }
@@ -1385,8 +1433,9 @@ setInterval(() => {
   if (Object.keys(playersWhoDied).length > 0) {
     let now = Date.now();
     for (let playerid in playersWhoDied) {
+      let [hlid, killer] = playersWhoDied[playerid];
       let pMetrics = playersInfo[playerid].metrics;
-      sockets[playerid].json.emit('deathmessage', leaderboard.getPlayerScore(playerid), now - pMetrics.timeStarted, pMetrics.kills, pMetrics.assists);
+      sockets[playerid].json.emit('deathmessage', leaderboard.getPlayerScore(playerid), now - pMetrics.timeStarted, pMetrics.kills, hlid, killer);
       //TODO don't immediately disconnect, but make a timer for redemption
       sockets[playerid].disconnect(true);
     }
