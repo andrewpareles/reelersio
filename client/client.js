@@ -2,13 +2,15 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'ws://192.168.1.204:3001';
-const ADDRESS = 'wss://trussbucket.herokuapp.com/';
+const ADDRESS = 'ws://192.168.1.204:3001';
+// const ADDRESS = 'wss://trussbucket.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
  */
+var record = [];
+
 var players = null;
 var hooks = null;
 var playerid = null;
@@ -29,6 +31,7 @@ var mouseX = 0, mouseY = 0;
 
 var isConnected = false;
 var animationFrameId = null;
+var gameDelay = 100;
 
 /** ---------- SENDING TO SERVER ---------- 
  * (receiving is at very bottom) 
@@ -375,16 +378,16 @@ var playerCamera = {
 
 
 /** ---------- FUNCTION CALLED EVERY FRAME TO DRAW/CALCULATE ---------- */
-var prevtime;
-var starttime;
-var currtime;
+var prevtime = null;
+var starttime = null;
+
 let newFrame = (timestamp) => {
-  if (starttime === undefined) {
+  if (starttime === null) {
     starttime = timestamp;
     prevtime = timestamp;
   }
   let dt = timestamp - prevtime;
-  currtime = timestamp - starttime;
+  let elapsed = timestamp - starttime;
   prevtime = timestamp;
 
   // calculate fps
@@ -581,6 +584,9 @@ var getUsername = async () => {
   return await new_promise;
 };
 
+var initServerTime = null;
+var initLocalTime = null;
+
 const whenConnect = async () => {
   console.log("connected! Waiting for username...");
   // 1. await USERNAME 
@@ -590,7 +596,7 @@ const whenConnect = async () => {
   const joinCallback = (...serverInfo) => {
     playerid = socket.id;
     isConnected = true;
-    [players, hooks, world, leaders, playerRadius, hookRadius_outer,
+    [initServerTime, players, hooks, world, leaders, playerRadius, hookRadius_outer,
       hookRadius_inner, mapRadius, maxMessageLen] = serverInfo;
   };
   await send.join(username, joinCallback);
@@ -612,19 +618,9 @@ const whenConnect = async () => {
 socket.on('connect', whenConnect);
 
 
-let prevtime2 = Date.now();
-const serverImage = (serverPlayers, serverHooks, playersWhoDied) => {
-  let dt = Date.now() - prevtime2;
-  prevtime2 = Date.now();
-  if (dt > 40) console.log('connection lag', dt);
+const serverImage = (timestamp, serverPlayers, serverHooks, playersWhoDied) => {
   if (isConnected) {
-    players = serverPlayers;
-    hooks = serverHooks;
-
-    for (pid in playersWhoDied) {
-      // TODO: START ANIMATION
-    }
-
+    record.push([timestamp, serverPlayers, serverHooks, playersWhoDied]);
   }
 }
 socket.on('serverimage', serverImage);
@@ -645,6 +641,9 @@ socket.on('deathmessage', whenDie);
 const whenDisconnect = () => {
   isConnected = false;
   window.cancelAnimationFrame(animationFrameId);
+  starttime = null;
+
+
   playerid = null;
   animationFrameId = null;
 

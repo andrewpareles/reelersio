@@ -1393,8 +1393,6 @@ const updateGame = (dt) => {
           if (killer) {
             updateScoreOnKill(killer, pid);
           }
-          console.log('A', killer);
-
           playersWhoDied[pid] = [hlid, killer];
         }
       }
@@ -1407,22 +1405,24 @@ const updateGame = (dt) => {
 
 var prevtime = null;
 setInterval(() => {
+  let now = Date.now();
   if (!prevtime) {
-    prevtime = Date.now();
+    prevtime = now;
     return;
   }
-  let dt = Date.now() - prevtime;
-  prevtime = Date.now();
+  let dt = now - prevtime;
+  prevtime = now;
   updateGame(dt);
 }, GAME_UPDATE_TIME);
 
 
-
+//All times are based on serverimage time
 
 setInterval(() => {
+  let now = Date.now();
   //send server image to all
   for (let playerid in sockets) {
-    sockets[playerid].volatile.json.emit('serverimage', players, hooks, playersWhoDied);
+    sockets[playerid].volatile.json.emit('serverimage', now, players, hooks, playersWhoDied);
   }
 
   //if need to send leaderboard, then do
