@@ -1073,7 +1073,6 @@ const validateStr = (s, debugString = '') => {
 }
 
 
-
 //if you want to understand the game, this is where to do it:
 // fired when client connects
 io.on('connection', (socket) => {
@@ -1081,7 +1080,7 @@ io.on('connection', (socket) => {
   socket.on('join', (username, callback) => {
     console.log("player joining:", socket.id, "sockets:", Object.keys(sockets), "players:", Object.keys(players));
     let debug = 'join';
-    username = validateStr(username, debug); if (!username) username = "";
+    username = validateStr(username, debug); if (!username) username = "Player";
     sockets[socket.id] = socket;
     player_create(socket.id, username);
     leaderboard.initPlayer(socket.id);
@@ -1204,6 +1203,20 @@ io.on('connection', (socket) => {
     if (checkPlayerIsConnected(socket.id, debug)) return;
     msg = validateStr(msg, debug); if (!msg) return;
 
+    // for commands:
+    /*
+Regex for commands:
+(\/tp\s+)((("[^"]*")|([^\s]*)))(\s*)((("[^"]*")|([^\s]*)))
+/tp "a"    "b"
+/tp a b
+/tp     fat  "test   "
+/tp "a""b"
+/tp "username 1" b
+*/
+// match  msg with ^ to see if tp, etc
+// if regex (tp)
+// else if regex (something else)
+// else:
     chatAddMessage(socket.id, msg);
   });
 
@@ -1229,7 +1242,7 @@ var playersWhoDied = {}; //{playerids: holeid}
 // 4. update hooks based on collisions (only for hooks with !h.to)
 // 5. hole collisions (DEATHS)
 const updateGame = (dt) => {
-  if (dt > GAME_UPDATE_TIME + 5) console.log('server fps lag', dt);
+  // if (dt > GAME_UPDATE_TIME + 5) console.log('server fps lag', dt);
   //1.
   for (let hid in hooks) {
     let h = hooks[hid];
