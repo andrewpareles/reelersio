@@ -637,7 +637,7 @@ const whenDie = (...deathInfo) => {
   console.log('killer', killer)
 
   // TODO SPECTATE & PLAY HOLE DEATH ANIMATION
-  prevStatsBox.innerHTML = 'Previous score: ' + score + ', with ' + kills + ' kills and a lifetime of ' + (duration / 1000) + 's.';
+  prevStatsBox.innerHTML = 'YOU GOT REEL\'D INTO A BLACK HOLE! Score: ' + score + ', with ' + kills + ' kills and a lifetime of ' + (duration / 1000) + 's.';
   if (killer) prevStatsBox.innerHTML += ' Killed by ' + (players[killer].username || 'Anonymous Reeler') + '.';
 }
 socket.on('deathmessage', whenDie);
