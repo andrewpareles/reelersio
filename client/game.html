@@ -1,103 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <title>reeler.io</title>
+    <meta charset="utf-8" />
 
-<head>
-  <title>reeler.io</title>
-  
-  <!-- HIGHLIGHT: -->
-  <script src="https://unpkg.com/highlight.run"></script>
-  <script>
-    H.init('ng206mnd', { // Get your project ID from https://app.highlight.io/setup
-        environment: 'production',
-        version: '1_lol',
-        enableCanvasRecording: true,        // enable canvas recording
+    <!-- HIGHLIGHT: -->
+
+    <!-- HIGHLIGHT: -->
+    <script src="https://unpkg.com/highlight.run"></script>
+    <script>
+      H.init("ng206mnd", {
+        // Get your project ID from https://app.highlight.io/setup
+        environment: "production",
+        version: "test3",
+        enableCanvasRecording: true, // enable canvas recording
         samplingStrategy: {
-          canvas: 2,                        // snapshot at 2 fps
-          canvasMaxSnapshotDimension: 480,  // snapshot at a max 480p resolution
+          canvas: 2, // snapshot at 2 fps
+          canvasMaxSnapshotDimension: 480, // snapshot at a max 480p resolution
         },
         networkRecording: {
-            enabled: true,
-            recordHeadersAndBody: true,
-            urlBlocklist: [],
+          enabled: true,
+          recordHeadersAndBody: true,
+          urlBlocklist: [],
         },
-    });
-  </script>
-</head>
+      });
+    </script>
 
+    <style>
+      html {
+        overflow: hidden;
+        zoom: 1;
+      }
 
+      html,
+      body,
+      div,
+      canvas {
+        zoom: 1;
+        margin: 0;
+        padding: 0;
+        background-color: white;
+        font-family: Verdana;
+      }
+    </style>
 
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
+  </head>
 
-<style>
-  html {
-    overflow: hidden;
-    zoom: 1;
-  }
+  <body>
+    <div
+      id="overlay"
+      style="
+        text-align: center;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        margin-right: -50%;
+        transform: translate(-50%, -50%);
+      "
+    >
+      <embed src="anim_canvas/anim_canvas.html" width="800" height="200" />
 
-  html,
-  body,
-  div,
-  canvas {
-    zoom: 1;
-    margin: 0;
-    padding: 0;
-    background-color: white;
-    font-family: Verdana;
-  }
-</style>
+      <br />
 
-<link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+      <input
+        id="usernamebox"
+        style="width: 200px; height: 25px; text-align: center"
+        placeholder="Name"
+        maxlength="16"
+      />
+      <br /><br />
+      <button id="playbutton" style="width: 80px; height: 30px">Play</button>
+      <br /><br />
 
-<div id='overlay'
-  style="text-align:center; position:absolute; top:50%; left:50%; margin-right:-50%; transform:translate(-50%,-50%);">
+      <!-- auto populated: -->
+      <div id="prevstatsbox" style="text-align: center"></div>
 
-  <embed src="anim_canvas/anim_canvas.html" width='800px' height='200px' />
+      <!-- instructions: -->
+      <div
+        style="
+          text-align: start;
+          max-width: 500px;
+          margin: 20px auto;
+          font-size: 14px;
+          color: gray;
+        "
+      >
+        <h2
+          style="margin-top: 0; margin-bottom: 0; font-size: 16px; color: black"
+        >
+          Main controls
+        </h2>
+        <ul>
+          <li style="margin-top: 5px"><b>WASD</b> to move</li>
+          <li style="margin-top: 5px"><b>left click</b> to throw your line</li>
+          <li style="margin-top: 5px"><b>right click</b> to reel in</li>
+        </ul>
+        <h2
+          style="margin-top: 0; margin-bottom: 0; font-size: 16px; color: black"
+        >
+          Chat
+        </h2>
+        <ul>
+          <li style="margin-top: 5px"><b>'/'</b> to start chat</li>
+          <li style="margin-top: 5px"><b>'Enter'</b> to submit</li>
+          <li style="margin-top: 5px"><b>'Esc'</b> to cancel</li>
+        </ul>
+        <h2
+          style="margin-top: 0; margin-bottom: 0; font-size: 16px; color: black"
+        >
+          Other controls
+        </h2>
+        <ul>
+          <li style="margin-top: 5px">Zig zag as you run for a boost</li>
+          <li style="margin-top: 5px"><b>'r'</b> to reset hooks</li>
+          <li style="margin-top: 5px">
+            <b>'shift'</b> to throw your line relative to your motion (hold it
+            down)
+          </li>
+          <li style="margin-top: 5px"><b>'c'</b> to reset camera</li>
+        </ul>
+      </div>
+    </div>
 
-  <br>
-
-  <input id="usernamebox" style="width:200px; height:25px; text-align:center;" placeholder="Name" maxlength="16">
-  <br><br>
-  <button id="playbutton" style="width:80px; height:30px;">Play</button>
-  <br><br>
-  
-  
-  <!-- auto populated: -->
-  <div id='prevstatsbox' style="text-align: center; "></div>
-
-  <!-- instructions: -->
-  <div style="text-align: start; max-width:500px; margin: 20px auto; font-size: 14px; color:gray;">
-    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Main controls</h2>
-    <ul>
-      <li style="margin-top: 5px"><b>WASD</b> to move</li>
-      <li style="margin-top: 5px"><b>left click</b> to throw your line</li>
-      <li style="margin-top: 5px"><b>right click</b> to reel in</li>
-    </ul>
-    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Chat</h2>
-    <ul>
-      <li style="margin-top: 5px"><b>'/'</b> to start chat</li>
-      <li style="margin-top: 5px"><b>'Enter'</b> to submit</li>
-      <li style="margin-top: 5px"><b>'Esc'</b> to cancel</li>
-    </ul>
-    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Other controls</h2>
-    <ul>
-      <li style="margin-top: 5px">Zig zag as you run for a boost</li>
-      <li style="margin-top: 5px"><b>'r'</b> to reset hooks</li>
-      <li style="margin-top: 5px"><b>'shift'</b> to throw your line relative to your motion (hold it down)</li>
-      <li style="margin-top: 5px"><b>'c'</b> to reset camera</li>
-    </ul>
-  </div>
-
-
-</div>
-
-<div id='game'>
-  <canvas id='canvas'></canvas>
-  <script src="client-bundled.js"></script>
-</div>
-
-
-
-
-
-
-
+    <div id="game">
+      <canvas id="canvas"></canvas>
+      <script src="client-bundled.js"></script>
+    </div>
+  </body>
 </html>
