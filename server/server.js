@@ -3,15 +3,19 @@ const express = require('express');
 const PORT = process.env.PORT || 3001;
 const INDEX = '/public/index.html';
 
+console.log('A')
 const server = express()
-  .use(express.static('public'))
-  .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
-  .listen(PORT, function () {
-    console.log(`listening on *:${PORT}`);
-  });
+.use(express.static('public'))
+.use((req, res) => res.sendFile(INDEX, { root: __dirname }))
+.listen(PORT, function () {
+  console.log(`listening on *:${PORT}`);
+});
+console.log('B')
 
 const io = require('socket.io')(server, { pingInterval: 5000, pingTimeout: 25000 });
+console.log('C')
 const { vec } = require('../common/vector.js');
+console.log('D')
 
 const GAME_UPDATE_TIME = 8; // formerly WAIT_TIME # ms to wait to re-render & broadcast players object
 const GAME_SEND_TIME = 16;
@@ -1462,3 +1466,6 @@ setInterval(() => {
     sockets[playerid].volatile.json.emit('requestfacingdirection', facingDirCallback(playerid));
   }
 }, GAME_REQUEST_TIME);
+
+
+console.log('Z')
