@@ -2,8 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'ws://192.168.1.204:3001';
-const ADDRESS = 'wss://reelerio.herokuapp.com/';
+const ADDRESS = 'ws://192.168.1.163:3001';
+// const ADDRESS = 'wss://reelerio.herokuapp.com/';
 const socket = io(ADDRESS);
 
 /** ---------- GAME CONSTANTS ----------

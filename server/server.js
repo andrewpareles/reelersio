@@ -1403,10 +1403,10 @@ const updateGame = (dt) => {
             }
           }
           //update killer's score
-          if (killer) {
-            updateScoreOnKill(killer, pid);
-          }
-          console.log('A', killer);
+          // if (killer) {
+          //   updateScoreOnKill(killer, pid);
+          // }
+          // console.log('A', killer);
 
           playersWhoDied[pid] = [hlid, killer];
         }
