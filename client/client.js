@@ -2,10 +2,8 @@
 const io = require('socket.io-client');
 const { vec } = require('../common/vector.js');
 
-// const ADDRESS = 'ws://192.168.1.163:3001';
-// const ADDRESS = 'wss://reelerio.herokuapp.com/';
-const ADDRESS = process.env.WS_BASE_URL; // wss://splendorous-pithivier-ee9c1b.netlify.app/
-const socket = io(ADDRESS);
+// before i was using 'ws://THE_URL.com' here, but looks like undefined is fine:
+const socket = io(process.env.WS_BASE_URL);
 
 /** ---------- GAME CONSTANTS ----------
  * these are initialized by server after player joins
