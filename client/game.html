@@ -50,30 +50,33 @@
   style="text-align:center; position:absolute; top:50%; left:50%; margin-right:-50%; transform:translate(-50%,-50%);">
   <embed src="anim_canvas/anim_canvas.html" width='800px' height='200px' />
   <br>
-  <div id='prevstatsbox'><br>
-    <h2 style="text-align: center;">Main controls</h2>
-    <ul>
-      <li><b>WASD</b> to move</li>
-      <li><b>'r'</b> to reset hooks</li>
-      <li><b>left click</b> to throw your line</li>
-      <li><b>right click</b> to reel in</li>
-    </ul>
-    <h2 style="text-align: center;">Chat</h2>
-    <ul>
-      <li><b>'/'</b> to start chat</li>
-      <li><b>'Enter'</b> to say chat</li>
-      <li><b>'Esc'</b> to cancel</li>
-    </ul>
-    <h2 style="text-align: center;">Other controls</h2>
-    <ul>
-      <li>Zig zag as you run for a boost</li>
-      <li><b>'c'</b> to reset camera</li>
-      <li><b>hold 'shift'</b> to throw your line relative to your motion</li>
-    </ul>
-  <br>
+
   <input id="usernamebox" style="width:200px; height:25px; text-align:center;" placeholder="Name" maxlength="16">
   <br><br>
   <button id="playbutton" style="width:80px; height:30px;">Play</button>
+
+
+  <div id='prevstatsbox' style="text-align: start; max-width:500px; margin: 0 auto; font-size: 14px; color:gray;"><br>
+    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Main controls</h2>
+    <ul>
+      <li style="margin-top: 5px"><b>WASD</b> to move</li>
+      <li style="margin-top: 5px"><b>left click</b> to throw your line</li>
+      <li style="margin-top: 5px"><b>right click</b> to reel in</li>
+    </ul>
+    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Chat</h2>
+    <ul>
+      <li style="margin-top: 5px"><b>'/'</b> to start chat</li>
+      <li style="margin-top: 5px"><b>'Enter'</b> to submit</li>
+      <li style="margin-top: 5px"><b>'Esc'</b> to cancel</li>
+    </ul>
+    <h2 style="margin-top: 0; margin-bottom: 0; font-size: 16px; color:black;">Other controls</h2>
+    <ul>
+      <li style="margin-top: 5px">Zig zag as you run for a boost</li>
+      <li style="margin-top: 5px"><b>'r'</b> to reset hooks</li>
+      <li style="margin-top: 5px"><b>'shift'</b> to throw your line relative to your motion (hold it down)</li>
+      <li style="margin-top: 5px"><b>'c'</b> to reset camera</li>
+    </ul>
+  </div>
 </div>
 
 <div id='game'>
