@@ -1,6 +1,6 @@
 # reelerio
  
-A websocket io game hosted on Render - https://reelerio.onrender.com/ - be patient, might take a few moments to load. 
+Be patient, might take a few moments to load: https://reelerio.onrender.com/
 
 Play as a fisherman and pull your friends (or enemies) into the black holes!
 
