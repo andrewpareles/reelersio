@@ -1,6 +1,8 @@
 # reelerio
  
-Be patient, might take a few moments to load: https://reelerio.onrender.com/
+Play the game: https://reelerio.onrender.com/
+
+Be patient, might take a few moments to load.
 
 Play as a fisherman and pull your friends (or enemies) into the black holes!
 
