@@ -1,7 +1,7 @@
 # reelerio
  
-A websocket io game hosted on Render - https://reelerio.onrender.com/ - might take a few moments to load. 
+Play the game: https://reelerio.onrender.com/ - might take a minute to load - be patient!
 
-Play as a fisherman and pull your friends (or enemies) into the black holes!
+Play as a fisherman and pull your friends (or enemies) into the black holes.
 
-Works best with multiple players/connections (if you don't have anyone to play with right now, you can join the game in two different tabs and play against yourself, although the physics are much more interesting with multiple people actively moving as they reel each other in!)
+If you don't have anyone to play with right now, you can join the game in two different tabs and play against yourself. But the physics get interesting when multiple people are active!
