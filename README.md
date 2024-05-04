@@ -1,6 +1,6 @@
 # reelerio
  
-Play the game: at reelers.io - might take a minute to load - be patient!
+Play the game: at https://reelers.io - might take a minute to load - be patient!
 
 Play as a fisherman and pull your friends (or enemies) into the black holes.
 
